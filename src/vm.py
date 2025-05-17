@@ -10,58 +10,64 @@ Closure = collections.namedtuple("Closure", ["code_label", "defining_env"])
 QuotedSymbol = collections.namedtuple("QuotedSymbol", ["name"])
 
 # --- Struct Instance Representation ---
-# Structs will be represented as dictionaries with a special key for their type.
-# e.g., {'__type__': 'Point', 'x_coord': 10, 'y_coord': 20}
+# Structs are dictionaries with a '__type__' key.
 
 # --- List Representation ---
-# NotScheme lists will be Python lists.
-# NotScheme nil will be Python None.
+# NotScheme lists are Python lists. Nil is Python None.
 
 
 # --- Instruction Set Definition ---
 class OpCode(Enum):
     # Stack Manipulation
-    PUSH = 1  # Push a literal value onto the stack. Operand: value
-    POP = 2  # Pop the top value from the stack.
+    PUSH = 1
+    POP = 2
 
     # Arithmetic / Logical Operations
-    ADD = 10  # Pop two values, add them, push result.
-    SUB = 11  # Pop two values, subtract top from second, push result.
-    MUL = 12  # Pop two values, multiply them, push result.
-    DIV = 13  # Pop two values, divide second by top, push result (float).
-    EQ = 20  # Pop two values, push True if equal, False otherwise.
-    LT = 21  # Pop two values, push True if second < top, False otherwise.
-    GT = 22  # Pop two values, push True if second > top, False otherwise.
-    NOT = 23  # Pop one value, push its boolean negation.
+    ADD = 10
+    SUB = 11
+    MUL = 12
+    DIV = 13
+    EQ = 20
+    LT = 21
+    GT = 22
+    NOT = 23
 
     # Variable Access
-    LOAD = 30  # Load variable value onto stack. Operand: var_name
-    STORE = 31  # Pop value, store in variable. Operand: var_name
+    LOAD = 30
+    STORE = 31
 
     # Control Flow
-    JUMP = 40  # Unconditional jump. Operand: label
-    JUMP_IF_FALSE = 41  # Pop value, jump if false. Operand: label
+    JUMP = 40
+    JUMP_IF_FALSE = 41
 
     # Function Calls & Closures
-    MAKE_CLOSURE = 45  # Create a closure. Operand: label
-    CALL = 50  # Call a closure. Operand: arg_count
-    RETURN = 51  # Return from function.
+    MAKE_CLOSURE = 45
+    CALL = 50
+    RETURN = 51
 
     # Struct Operations
-    MAKE_STRUCT = 55  # Operands: struct_name_str, field_names_tuple
-    GET_FIELD = 56  # Operand: field_name_str
-    SET_FIELD = 57  # Operand: field_name_str
-
-    # List Primitives
-    IS_NIL = 70  # Pops value, pushes True if None, else False.
-    CONS = 71  # Pops item, pops list. Pushes [item] + list.
-    FIRST = 72  # Pops list, pushes its first element. (car)
-    REST = 73  # Pops list, pushes list[1:]. (cdr)
-    MAKE_LIST = 74  # Operand: arg_count. Pops arg_count items, creates list.
+    MAKE_STRUCT = 55
+    GET_FIELD = 56
+    SET_FIELD = 57
 
     # VM Control
-    HALT = 60  # Stop execution.
-    PRINT = 61  # Pop value and print it (for debugging/output).
+    HALT = 60  # Kept original number for consistency
+    PRINT = 61
+
+    # List Primitives (Moved HALT/PRINT up for grouping)
+    IS_NIL = 70
+    CONS = 71
+    FIRST = 72
+    REST = 73
+    MAKE_LIST = 74
+
+    # Type Predicates
+    IS_BOOLEAN = 80
+    IS_NUMBER = 81
+    IS_STRING = 82
+    IS_LIST = 83  # Checks for Python list type
+    IS_STRUCT = 84  # Checks for dict and __type__ key
+    IS_FUNCTION = 85  # Checks for Closure instance
 
 
 # --- Virtual Machine Class ---
@@ -69,7 +75,6 @@ class VirtualMachine:
     def __init__(self, code):
         self.code = code
         self.labels = self._find_labels(code)
-
         self.operand_stack = []
         self.call_stack = collections.deque()
         self.ip = 0
@@ -146,236 +151,231 @@ class VirtualMachine:
             self.ip += 1
 
             try:
+                # --- Stack Manipulation ---
                 if opcode == OpCode.PUSH:
                     self.operand_stack.append(args[0])
                 elif opcode == OpCode.POP:
                     if not self.operand_stack:
                         raise IndexError("POP from empty stack")
                     self.operand_stack.pop()
+                # --- Arithmetic / Logical Operations ---
                 elif opcode == OpCode.ADD:
                     if len(self.operand_stack) < 2:
                         raise IndexError("ADD requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     self.operand_stack.append(left + right)
                 elif opcode == OpCode.SUB:
                     if len(self.operand_stack) < 2:
                         raise IndexError("SUB requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     self.operand_stack.append(left - right)
                 elif opcode == OpCode.MUL:
                     if len(self.operand_stack) < 2:
                         raise IndexError("MUL requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     self.operand_stack.append(left * right)
                 elif opcode == OpCode.DIV:
                     if len(self.operand_stack) < 2:
                         raise IndexError("DIV requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     if right == 0:
                         raise ZeroDivisionError("Division by zero")
                     self.operand_stack.append(float(left) / right)
                 elif opcode == OpCode.EQ:
                     if len(self.operand_stack) < 2:
                         raise IndexError("EQ requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     self.operand_stack.append(left == right)
                 elif opcode == OpCode.LT:
                     if len(self.operand_stack) < 2:
                         raise IndexError("LT requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     self.operand_stack.append(left < right)
                 elif opcode == OpCode.GT:
                     if len(self.operand_stack) < 2:
                         raise IndexError("GT requires two operands")
-                    right = self.operand_stack.pop()
-                    left = self.operand_stack.pop()
+                    right, left = self.operand_stack.pop(), self.operand_stack.pop()
                     self.operand_stack.append(left > right)
                 elif opcode == OpCode.NOT:
                     if not self.operand_stack:
                         raise IndexError("NOT requires one operand")
-                    val = self.operand_stack.pop()
-                    self.operand_stack.append(not val)
+                    self.operand_stack.append(not self.operand_stack.pop())
+                # --- Variable Access ---
                 elif opcode == OpCode.LOAD:
-                    var_name = args[0]
-                    value = self._lookup(var_name)
-                    self.operand_stack.append(value)
+                    self.operand_stack.append(self._lookup(args[0]))
                 elif opcode == OpCode.STORE:
                     if not self.operand_stack:
-                        raise IndexError(
-                            f"STORE '{args[0]}' requires a value on the stack"
-                        )
-                    var_name = args[0]
-                    value = self.operand_stack.pop()
-                    self._store(var_name, value)
+                        raise IndexError(f"STORE '{args[0]}' requires a value")
+                    self._store(args[0], self.operand_stack.pop())
+                # --- Control Flow ---
                 elif opcode == OpCode.JUMP:
-                    target_label = args[0]
-                    self.ip = self._get_instruction_index(target_label)
+                    self.ip = self._get_instruction_index(args[0])
                 elif opcode == OpCode.JUMP_IF_FALSE:
                     if not self.operand_stack:
-                        raise IndexError("JUMP_IF_FALSE requires a value on the stack")
-                    condition = self.operand_stack.pop()
-                    if not condition:
-                        target_label = args[0]
-                        self.ip = self._get_instruction_index(target_label)
+                        raise IndexError("JUMP_IF_FALSE requires a value")
+                    if not self.operand_stack.pop():
+                        self.ip = self._get_instruction_index(args[0])
+                # --- Function Calls & Closures ---
                 elif opcode == OpCode.MAKE_CLOSURE:
-                    code_label = args[0]
-                    defining_env = list(self.env_chain)
-                    closure = Closure(code_label=code_label, defining_env=defining_env)
-                    self.operand_stack.append(closure)
+                    self.operand_stack.append(
+                        Closure(code_label=args[0], defining_env=list(self.env_chain))
+                    )
                 elif opcode == OpCode.CALL:
                     arg_count = args[0]
                     if len(self.operand_stack) < arg_count + 1:
-                        raise IndexError(
-                            f"CALL expected {arg_count} arguments and a closure, stack too small: {len(self.operand_stack)}"
-                        )
+                        raise IndexError("CALL stack underflow")
                     callee = self.operand_stack.pop()
                     if not isinstance(callee, Closure):
                         self.operand_stack.append(callee)
-                        raise TypeError(
-                            f"CALL expects a Closure object, got {type(callee)}"
-                        )
-                    if len(self.operand_stack) < arg_count:
-                        self.operand_stack.append(callee)
-                        raise IndexError(
-                            f"CALL expected {arg_count} arguments on stack for closure '{callee.code_label}', found {len(self.operand_stack)}"
-                        )
-                    return_ip = self.ip
-                    self.call_stack.append((return_ip, self.env_chain))
-                    new_local_scope = {}
-                    self.env_chain = callee.defining_env + [new_local_scope]
+                        raise TypeError(f"CALL expects Closure, got {type(callee)}")
+                    # Args are already on stack below the callee, accessible by callee's STOREs
+                    self.call_stack.append((self.ip, self.env_chain))
+                    self.env_chain = callee.defining_env + [{}]  # New local scope
                     self.ip = self._get_instruction_index(callee.code_label)
                 elif opcode == OpCode.RETURN:
                     if not self.call_stack:
-                        print("Warning: RETURN called from top level. Halting.")
                         self.ip = code_len
+                        print("Warning: RETURN from top level.")
                         break
-                    return_ip, previous_env_chain = self.call_stack.pop()
-                    self.env_chain = previous_env_chain
-                    self.ip = return_ip
+                    self.ip, self.env_chain = self.call_stack.pop()
+                # --- Struct Operations ---
                 elif opcode == OpCode.MAKE_STRUCT:
-                    struct_name_str = args[0]
-                    field_names_tuple = args[1]
+                    struct_name_str, field_names_tuple = args[0], args[1]
                     field_count = len(field_names_tuple)
                     if len(self.operand_stack) < field_count:
                         raise IndexError(
-                            f"MAKE_STRUCT '{struct_name_str}' expected {field_count} field values on stack, found {len(self.operand_stack)}"
+                            f"MAKE_STRUCT '{struct_name_str}' needs {field_count} values"
                         )
                     struct_instance = {"__type__": struct_name_str}
-                    field_values = []
-                    for _ in range(field_count):
-                        field_values.insert(0, self.operand_stack.pop())
-                    for i in range(field_count):
-                        struct_instance[field_names_tuple[i]] = field_values[i]
+                    field_values = [
+                        self.operand_stack.pop() for _ in range(field_count)
+                    ][::-1]  # Pop and reverse
+                    for i, name in enumerate(field_names_tuple):
+                        struct_instance[name] = field_values[i]
                     self.operand_stack.append(struct_instance)
                 elif opcode == OpCode.GET_FIELD:
                     field_name_str = args[0]
                     if not self.operand_stack:
-                        raise IndexError(
-                            f"GET_FIELD '{field_name_str}' requires a struct instance on the stack."
-                        )
+                        raise IndexError(f"GET_FIELD '{field_name_str}' needs struct")
                     instance = self.operand_stack.pop()
-                    if not isinstance(instance, dict) or "__type__" not in instance:
+                    if not (isinstance(instance, dict) and "__type__" in instance):
                         self.operand_stack.append(instance)
                         raise TypeError(
-                            f"GET_FIELD '{field_name_str}' expected a struct instance, got {type(instance)}."
+                            f"GET_FIELD expects struct, got {type(instance)}"
                         )
                     if field_name_str not in instance:
                         self.operand_stack.append(instance)
                         raise AttributeError(
-                            f"Struct type '{instance['__type__']}' has no field '{field_name_str}'."
+                            f"Struct {instance['__type__']} no field '{field_name_str}'"
                         )
                     self.operand_stack.append(instance[field_name_str])
                 elif opcode == OpCode.SET_FIELD:
                     field_name_str = args[0]
                     if len(self.operand_stack) < 2:
                         raise IndexError(
-                            f"SET_FIELD '{field_name_str}' requires a value and a struct instance on the stack."
+                            f"SET_FIELD '{field_name_str}' needs value and struct"
                         )
-                    new_value = self.operand_stack.pop()
-                    instance = self.operand_stack.pop()
-                    if not isinstance(instance, dict) or "__type__" not in instance:
-                        self.operand_stack.append(instance)
-                        self.operand_stack.append(new_value)
+                    new_value, instance = (
+                        self.operand_stack.pop(),
+                        self.operand_stack.pop(),
+                    )
+                    if not (isinstance(instance, dict) and "__type__" in instance):
+                        self.operand_stack.extend([instance, new_value])
                         raise TypeError(
-                            f"SET_FIELD '{field_name_str}' expected a struct instance, got {type(instance)}."
+                            f"SET_FIELD expects struct, got {type(instance)}"
                         )
                     if field_name_str not in instance:
-                        self.operand_stack.append(instance)
-                        self.operand_stack.append(new_value)
+                        self.operand_stack.extend([instance, new_value])
                         raise AttributeError(
-                            f"Struct type '{instance['__type__']}' has no field '{field_name_str}' to set."
+                            f"Struct {instance['__type__']} no field '{field_name_str}'"
                         )
                     instance[field_name_str] = new_value
                     self.operand_stack.append(instance)
-
+                # --- List Primitives ---
                 elif opcode == OpCode.IS_NIL:
                     if not self.operand_stack:
                         raise IndexError("IS_NIL requires one operand")
-                    val = self.operand_stack.pop()
-                    self.operand_stack.append(val is None)
+                    self.operand_stack.append(self.operand_stack.pop() is None)
                 elif opcode == OpCode.CONS:
                     if len(self.operand_stack) < 2:
                         raise IndexError("CONS requires item and list")
-                    item = self.operand_stack.pop()
-                    lst = self.operand_stack.pop()
+                    item, lst = self.operand_stack.pop(), self.operand_stack.pop()
                     if lst is None:
                         self.operand_stack.append([item])
                     elif not isinstance(lst, list):
-                        self.operand_stack.append(lst)
-                        self.operand_stack.append(item)
-                        raise TypeError(
-                            f"CONS expects a list or nil as its second argument (list part), got {type(lst)}"
-                        )
+                        self.operand_stack.extend([lst, item])
+                        raise TypeError(f"CONS expects list/nil, got {type(lst)}")
                     else:
                         self.operand_stack.append([item] + lst)
                 elif opcode == OpCode.FIRST:
                     if not self.operand_stack:
                         raise IndexError("FIRST requires a list")
                     lst = self.operand_stack.pop()
-                    if not isinstance(lst, list) or not lst:
+                    if not (isinstance(lst, list) and lst):
                         self.operand_stack.append(lst)
-                        raise TypeError(
-                            f"FIRST expects a non-empty list, got {type(lst) if isinstance(lst, list) else lst}"
-                        )
+                        raise TypeError(f"FIRST expects non-empty list, got {lst}")
                     self.operand_stack.append(lst[0])
                 elif opcode == OpCode.REST:
                     if not self.operand_stack:
                         raise IndexError("REST requires a list")
                     lst = self.operand_stack.pop()
-                    if not isinstance(lst, list) or not lst:
+                    if not (isinstance(lst, list) and lst):
                         self.operand_stack.append(lst)
-                        raise TypeError(
-                            f"REST expects a non-empty list, got {type(lst) if isinstance(lst, list) else lst}"
-                        )
+                        raise TypeError(f"REST expects non-empty list, got {lst}")
                     self.operand_stack.append(lst[1:] if len(lst) > 1 else None)
                 elif opcode == OpCode.MAKE_LIST:
                     arg_count = args[0]
                     if len(self.operand_stack) < arg_count:
-                        raise IndexError(
-                            f"MAKE_LIST expected {arg_count} items on stack, found {len(self.operand_stack)}"
-                        )
-                    new_list = []
-                    for _ in range(arg_count):
-                        new_list.insert(0, self.operand_stack.pop())
-                    self.operand_stack.append(new_list)
-
+                        raise IndexError(f"MAKE_LIST needs {arg_count} items")
+                    self.operand_stack.append(
+                        [self.operand_stack.pop() for _ in range(arg_count)][::-1]
+                    )
+                # --- Type Predicates ---
+                elif opcode == OpCode.IS_BOOLEAN:
+                    if not self.operand_stack:
+                        raise IndexError("IS_BOOLEAN requires one operand")
+                    self.operand_stack.append(
+                        isinstance(self.operand_stack.pop(), bool)
+                    )
+                elif opcode == OpCode.IS_NUMBER:
+                    if not self.operand_stack:
+                        raise IndexError("IS_NUMBER requires one operand")
+                    self.operand_stack.append(
+                        isinstance(self.operand_stack.pop(), (int, float))
+                    )
+                elif opcode == OpCode.IS_STRING:
+                    if not self.operand_stack:
+                        raise IndexError("IS_STRING requires one operand")
+                    self.operand_stack.append(isinstance(self.operand_stack.pop(), str))
+                elif opcode == OpCode.IS_LIST:
+                    if not self.operand_stack:
+                        raise IndexError("IS_LIST requires one operand")
+                    val = self.operand_stack.pop()
+                    self.operand_stack.append(
+                        isinstance(val, list) or val is None
+                    )  # nil is an empty list conceptually
+                elif opcode == OpCode.IS_STRUCT:
+                    if not self.operand_stack:
+                        raise IndexError("IS_STRUCT requires one operand")
+                    val = self.operand_stack.pop()
+                    self.operand_stack.append(
+                        isinstance(val, dict) and "__type__" in val
+                    )
+                elif opcode == OpCode.IS_FUNCTION:
+                    if not self.operand_stack:
+                        raise IndexError("IS_FUNCTION requires one operand")
+                    self.operand_stack.append(
+                        isinstance(self.operand_stack.pop(), Closure)
+                    )
+                # --- VM Control ---
                 elif opcode == OpCode.HALT:
                     print("Execution halted.")
                     self.ip = code_len
                     break
                 elif opcode == OpCode.PRINT:
                     if not self.operand_stack:
-                        raise IndexError("PRINT requires a value on the stack")
-                    value = self.operand_stack.pop()
-                    print(
-                        "Output:", value
-                    )  # This will use Python's default str/repr for QuotedSymbol
+                        raise IndexError("PRINT requires a value")
+                    print("Output:", self.operand_stack.pop())
                 else:
                     raise RuntimeError(f"Unknown opcode encountered: {opcode}")
 
@@ -407,13 +407,37 @@ if __name__ == "__main__":
     print("Virtual Machine definition loaded.")
     print("To run tests, please execute 'vm_tests.py'.")
 
-    # Example of pushing and printing a QuotedSymbol
-    print("\n--- VM QuotedSymbol Test ---")
-    qs_test_code = [
-        (OpCode.PUSH, QuotedSymbol(name="my_symbol")),
-        (OpCode.PRINT,),
+    print("\n--- VM Type Predicate Test ---")
+    type_predicate_test_code = [
+        (OpCode.PUSH, 10),
+        (OpCode.IS_NUMBER,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, "hello"),
+        (OpCode.IS_STRING,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, True),
+        (OpCode.IS_BOOLEAN,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, None),
+        (OpCode.IS_LIST,),
+        (OpCode.PRINT,),  # True (nil is a list)
+        (OpCode.PUSH, []),
+        (OpCode.IS_LIST,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, [1, 2]),
+        (OpCode.IS_LIST,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, {"__type__": "S"}),
+        (OpCode.IS_STRUCT,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, Closure("L1", [])),
+        (OpCode.IS_FUNCTION,),
+        (OpCode.PRINT,),  # True
+        (OpCode.PUSH, 10),
+        (OpCode.IS_STRING,),
+        (OpCode.PRINT,),  # False
         (OpCode.HALT,),
     ]
-    vm_qs_test = VirtualMachine(qs_test_code)
-    vm_qs_test.run()
+    vm_tp_test = VirtualMachine(type_predicate_test_code)
+    vm_tp_test.run()
     print("-----------------------------")

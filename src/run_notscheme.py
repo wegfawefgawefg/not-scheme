@@ -106,16 +106,9 @@ def run_notscheme_test(
 
                 formatted_expected_prints = []
                 for p_val in expected_prints:
-                    # Format expected values to match Python's default print output for these types
                     if isinstance(p_val, QuotedSymbol):
-                        formatted_expected_prints.append(
-                            f"Output: {p_val!r}"
-                        )  # Use repr for namedtuple
-                    elif isinstance(
-                        p_val, list
-                    ):  # For lists containing QuotedSymbols or other values
-                        # Manually construct the expected string representation for lists
-                        # to match how Python's print formats lists of these objects.
+                        formatted_expected_prints.append(f"Output: {p_val!r}")
+                    elif isinstance(p_val, list):
                         list_content_str = ", ".join(repr(item) for item in p_val)
                         formatted_expected_prints.append(
                             f"Output: [{list_content_str}]"
@@ -154,7 +147,7 @@ def run_notscheme_test(
             print(f"PASS: Caught expected error: {e}")
         else:
             print(f"FAIL: Unexpected error: {e}")
-            import traceback  # Keep for debugging specific test failures
+            import traceback
 
             traceback.print_exc()
     print("-" * 20)
@@ -315,11 +308,10 @@ if __name__ == "__main__":
         expected_prints=[1, [2, "three"], [0, 1, 2, "three"], True, False],
     )
 
-    # --- New Quote Tests ---
     run_notscheme_test(
         "Quote: Simple Symbol",
         "(print 'my_symbol)",
-        expected_value=None,  # print returns nil, then POPped by top-level form logic, then HALT
+        expected_value=None,
         expected_prints=[QuotedSymbol(name="my_symbol")],
     )
 
@@ -332,7 +324,7 @@ if __name__ == "__main__":
 
     run_notscheme_test(
         "Quote: Nested Symbol (' 'another_symbol)",
-        "(print ''another_symbol)",  # Equivalent to (print (quote (quote another_symbol)))
+        "(print ''another_symbol)",
         expected_value=None,
         expected_prints=[
             [QuotedSymbol(name="quote"), QuotedSymbol(name="another_symbol")]
@@ -341,7 +333,7 @@ if __name__ == "__main__":
 
     run_notscheme_test(
         "Quote: List with Nested Quote ('(a 'b c))",
-        "(print '(a 'b c))",  # Equivalent to (print (quote (a (quote b) c)))
+        "(print '(a 'b c))",
         expected_value=None,
         expected_prints=[
             [
@@ -356,19 +348,60 @@ if __name__ == "__main__":
         "Quote: Empty List ('())",
         "(print '())",
         expected_value=None,
-        expected_prints=[[]],  # Empty list
+        expected_prints=[[]],
     )
 
     run_notscheme_test(
         "Quote: Evaluate Quoted List as Data",
         """
         (let my_quoted_list '(1 "two" true))
-        (first my_quoted_list) // Should be 1 if lists are just Python lists
+        (first my_quoted_list) 
         """,
-        # If quoted lists are just Python lists, (first '(1 2)) works.
-        # If they were special "quoted list objects", 'first' might need to handle them.
-        # Our VM uses Python lists, so this should work.
         expected_value=1,
+    )
+
+    # --- New Type Predicate Tests ---
+    run_notscheme_test(
+        "Type Predicates",
+        """
+        (print (is_number 10))       // True
+        (print (is_number 3.14))     // True
+        (print (is_number "no"))     // False
+        (print (is_string "yes"))    // True
+        (print (is_string 100))      // False
+        (print (is_boolean true))    // True
+        (print (is_boolean false))   // True
+        (print (is_boolean 0))       // False
+        (print (is_list (list 1 2))) // True
+        (print (is_list nil))        // True (nil is a list)
+        (print (is_list '()))       // True (quoted empty list is a list)
+        (print (is_list 1))          // False
+        (struct S (f))
+        (print (is_struct (S 1)))    // True
+        (print (is_struct (list 1))) // False
+        (print (is_function (lambda () 1))) // True
+        (print (is_function 123))           // False
+        (is_nil nil) // Final value on stack
+        """,
+        expected_value=True,  # Result of (is_nil nil)
+        expected_prints=[
+            True,
+            True,
+            False,  # is_number
+            True,
+            False,  # is_string
+            True,
+            True,
+            False,  # is_boolean
+            True,
+            True,
+            True,
+            False,  # is_list
+            True,
+            False,  # is_struct
+            True,
+            False,  # is_function
+        ],
     )
 
     print("\n--- All NotScheme end-to-end tests completed ---")
