@@ -1,0 +1,32 @@
+So, what's next? We have a solid foundation. Here are a few directions we could go, building on what we have:
+
+    Refine QuoteNode Code Generation:
+        Currently, our code generator pushes simplified representations for quoted expressions (like Python tuples for lists, or specially formatted strings for symbols). For true Lisp-like behavior where 'foo results in a distinct symbol type and '(a b) results in a list of such symbols (not just strings), we'd need to:
+            Potentially introduce a Symbol type in the VM (distinct from strings used for variable names).
+            Add VM opcodes like PUSH_LITERAL_SYMBOL <name> and MAKE_LITERAL_LIST <count>.
+            Update the code generator for QuoteNode to use these new opcodes.
+        This would make quoted data more "first-class" and usable for metaprogramming or data manipulation in a way that's idiomatic to Lisp.
+
+    Standard Library Implementation - Phase 1 (Core Primitives):
+        We've listed core functions like list, cons, first, rest, is_nil, etc.
+        Many of these will require direct VM opcodes and corresponding handlers in codegen.py (similar to how we handled +, print, etc.). For example, (list 1 2) would need to push 1, push 2, then an opcode like MAKE_LIST 2.
+        This would make the language much more practical for writing list-processing functions.
+
+    Full use Statement Implementation (Module Loading):
+        Currently, _generate_use_node is a placeholder.
+        Implementing this fully involves the compiler driver (run_notscheme.py or a new script) being able to:
+            Locate the specified module file.
+            Lex, parse, and (partially or fully) compile that module.
+            Extract its public definitions (symbols, function labels, struct info).
+            Make these available to the CodeGenerator for the module currently being compiled.
+        This is a larger architectural piece.
+
+    More Language Features:
+        Enums: Define syntax, AST node, parser rule, codegen, and VM representation.
+        More Loop Constructs: A for-each loop for lists, or a Scheme-like do loop.
+
+Given the current state, I'd suggest Standard Library Implementation - Phase 1 (Core Primitives), focusing on list manipulation functions (list, cons, first, rest, is_nil). This would make NotScheme significantly more expressive and allow us to write more interesting test programs. It also directly builds upon the VM and codegen infrastructure we have.
+
+Refining QuoteNode is also important for Lisp purity, but having basic list operations might be more immediately useful.
+
+What direction feels most interesting or important to you right now?

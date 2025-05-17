@@ -11,7 +11,7 @@ Our language will use S-expressions. All user-defined identifiers (variables, fu
     * **Strings:** (Unchanged)
     * **Symbols:** Used for variable names, function names, keywords, etc. Follow underscore_case for user definitions.
         * Examples: `x`, `my_variable`, `calculate_sum`, `Point`, `x_coord`
-    * **Booleans:** `#t` for true, `#f` for false.
+    * **Booleans:** `true` for true, `false` for false.
     * **Nil/Empty List:** `nil` (represents an empty list, also often used as a general null value).
 
 3.  **Comments:**
@@ -21,7 +21,7 @@ Our language will use S-expressions. All user-defined identifiers (variables, fu
     * **Lists:**
         * S-expressions naturally form lists.
         * **Quoted Lists (Literal Data):** `'(<item1> <item2> ...)` creates a literal list. The items are not evaluated.
-            * Example: `'(1 "hello" #t)`
+            * Example: `'(1 "hello" true)`
         * **List Constructor (Built-in/Std Lib):** `(list <item1-expr> <item2-expr> ...)` creates a list by evaluating each item expression.
             * Example: `(list (+ 1 2) "world")` results in `(3 "world")`
     * **Structs:** (Defined by `struct` special form)

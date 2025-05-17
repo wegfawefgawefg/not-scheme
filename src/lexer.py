@@ -13,7 +13,7 @@ class TokenType(Enum):
     SYMBOL = auto()  # identifiers, keywords, operators like +, *
     NUMBER = auto()  # 123, 3.14, -5
     STRING = auto()  # "hello world"
-    BOOLEAN = auto()  # #t, #f
+    BOOLEAN = auto()  # true, false
     NIL = auto()  # nil
     COMMENT = auto()  # // ...
     EOF = auto()  # End of File
@@ -26,14 +26,14 @@ Token = namedtuple("Token", ["type", "value", "line", "col"])
 # Order matters: keywords like 'nil' should be checked before general SYMBOL
 # to avoid 'nil' being tokenized as SYMBOL("nil") if we were to distinguish.
 # However, for S-expressions, keywords are often just symbols until parsing.
-# Let's keep it simple: 'nil', '#t', '#f' will be specific token types.
+# Let's keep it simple: 'nil', 'true', 'false' will be specific token types.
 # All other non-numeric/non-string sequences are SYMBOLS.
 TOKEN_REGEX_PATTERNS = [
     (r"//[^\n]*", TokenType.COMMENT),  # Comments (ignore)
     (r"\(", TokenType.LPAREN),
     (r"\)", TokenType.RPAREN),
     (r"'", TokenType.QUOTE),  # For '() lists
-    (r"#t|#f", TokenType.BOOLEAN),
+    (r"\btrue\b|\bfalse\b", TokenType.BOOLEAN),
     (r"nil", TokenType.NIL),
     (r'"(?:\\.|[^"\\])*"', TokenType.STRING),  # Strings with escape sequences
     # Numbers: integers, floats, negative numbers
@@ -120,7 +120,7 @@ def tokenize(source_code: str) -> list[Token]:
                         )
                 elif token_type == TokenType.BOOLEAN:
                     tokens.append(
-                        Token(token_type, value == "#t", line_num, col_num)
+                        Token(token_type, value == "true", line_num, col_num)
                     )  # Store as Python bool
                 elif token_type == TokenType.NIL:
                     tokens.append(
@@ -173,8 +173,8 @@ if __name__ == "__main__":
     (set p1 x_coord (+ (get p1 x_coord) 5)) // p1.x = 15
     (print (get p1 x_coord))
 
-    (let items '(1 "two" #t nil (nested list)))
-    (while #f (print "looping"))
+    (let items '(1 "two" true nil (nested list)))
+    (while false (print "looping"))
     """
 
     print(f"\nSource Code 1:\n{test_code_1}")

@@ -264,7 +264,7 @@ if __name__ == "__main__":
         """
         (print "Hello")
         (print 123)
-        (print #t)
+        (print true)
         (print nil)
         (+ 1 1) 
         """,

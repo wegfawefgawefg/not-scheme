@@ -35,6 +35,7 @@ TITLES=(
 # Array of explicit source files to concatenate (if any)
 SRC_FILES=(
     # "./goal.txt"
+    # "./next.txt"
 )
 
 # Whitelist of file extensions (without the dot)

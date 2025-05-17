@@ -18,7 +18,7 @@ The language aims to be a "Scheme" that compiles, incorporating the following fe
         * Integers (e.g., `10`, `-5`)
         * Floating-point numbers (e.g., `3.14`, `-0.01`)
     * **Strings:** (e.g., `"hello world"`)
-    * **Booleans:** (`#t` and `#f` or similar, handled by VM logic)
+    * **Booleans:** (`true` and `false` or similar, handled by VM logic)
 
 2.  **Data Structures:**
     * **Structs/Records:** User-defined composite data types (similar to C structs or Python classes without methods initially).

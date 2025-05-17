@@ -484,7 +484,7 @@ if __name__ == "__main__":
     (let message "A simple let") 
 
     // Quoted list (single binding, now should parse with empty body in AST)
-    (let data '(1 foo #t))
+    (let data '(1 foo true))
     
     // While loop
     (begin
@@ -547,7 +547,7 @@ if __name__ == "__main__":
     except (LexerError, ParserError) as e:
         print(f"Error: {e}")
 
-    test_code_if_error = "(if #t 1)"
+    test_code_if_error = "(if true 1)"
     print(f"\nParsing code with error:\n{test_code_if_error}")
     try:
         tokens = tokenize(test_code_if_error)
@@ -567,7 +567,7 @@ if __name__ == "__main__":
 
     test_code_quote = """
     (let x 'foo) 
-    (let y '(bar (baz 10) #f))
+    (let y '(bar (baz 10) false))
     (let z ''(a b)) 
     """
     print(f"\nParsing quoted code:\n{test_code_quote}")
