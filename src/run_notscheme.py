@@ -67,7 +67,7 @@ def run_notscheme_test(
     expected_value: Any = None,
     expect_error: bool = False,
     expected_prints: Optional[List[Any]] = None,
-):  # Changed expected_prints to List[Any]
+):
     """
     Runs a NotScheme test case through the full pipeline.
     expected_prints elements should be the raw values, they will be formatted.
@@ -98,24 +98,20 @@ def run_notscheme_test(
             )
         else:
             if expected_prints is not None:
-                # Filter out "Execution halted." and empty lines from actual output
                 actual_print_lines = [
                     line
                     for line in actual_prints_text.split("\n")
                     if line.strip() and line.strip() != "Execution halted."
                 ]
-
-                # Format expected prints to match VM's "Output: value"
-                # Handle Python's True/False/None string representations
                 formatted_expected_prints = []
                 for p_val in expected_prints:
                     if p_val is True:
                         formatted_expected_prints.append("Output: True")
                     elif p_val is False:
                         formatted_expected_prints.append("Output: False")
-                    elif p_val is None:  # For NotScheme 'nil'
+                    elif p_val is None:
                         formatted_expected_prints.append("Output: None")
-                    else:  # Strings, numbers
+                    else:
                         formatted_expected_prints.append(f"Output: {p_val}")
 
                 if actual_print_lines == formatted_expected_prints:
@@ -130,14 +126,15 @@ def run_notscheme_test(
                     print(f"Result: PASS (Expected: {expected_value}, Got: {result})")
                 else:
                     print(f"Result: FAIL (Expected: {expected_value}, Got: {result})")
-            elif expected_prints and expected_value is None and result is not None:
-                # This case handles when HALT is expected to make result None after prints
-                if result is not None:  # If result is not None when it should be
+            elif (
+                expected_prints and expected_value is None
+            ):  # Check if result is None when prints are primary
+                if result is None:
+                    print(f"Result: PASS (Expected: None, Got: {result})")
+                else:
                     print(
                         f"Result: UNEXPECTED (Expected None after prints and HALT, Got: {result})"
                     )
-                else:  # Result is None as expected
-                    print(f"Result: PASS (Expected: None, Got: {result})")
 
     except (NotSchemeError, Exception) as e:
         if expect_error:
@@ -274,7 +271,7 @@ if __name__ == "__main__":
             123,
             True,
             None,
-        ],  # Use Python equivalents for comparison
+        ],
     )
 
     run_notscheme_test(
@@ -286,6 +283,28 @@ if __name__ == "__main__":
         x
         """,
         expected_value=5,
+    )
+
+    run_notscheme_test(
+        "List Operations Test",
+        """
+        (static my_list (list 1 (+ 1 1) "three")) // my_list = (1 2 "three")
+        (print (first my_list))                     // Output: 1
+        (print (rest my_list))                      // Output: (2 "three")
+        (static my_list2 (cons 0 my_list))          // my_list2 = (0 1 2 "three")
+        (print my_list2)                            // Output: (0 1 2 "three")
+        (print (is_nil nil))                        // Output: true
+        (print (is_nil my_list2))                   // Output: false
+        (first (list "final"))                      // Final value on stack: "final"
+        """,
+        expected_value="final",  # (first (list "final")) should leave "final"
+        expected_prints=[
+            1,
+            [2, "three"],  # Note: VM represents lists as Python lists
+            [0, 1, 2, "three"],
+            True,
+            False,
+        ],
     )
 
     print("\n--- All NotScheme end-to-end tests completed ---")

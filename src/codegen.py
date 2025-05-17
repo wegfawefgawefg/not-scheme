@@ -52,33 +52,21 @@ class CodeGenerationError(Exception):
     pass
 
 
-# Mapping of NotScheme primitive symbols to VM OpCodes and expected arity
-# Arity of -1 means variable number of arguments (e.g. print) - special handling needed
-# Arity of None means the opcode itself handles stack (like ADD, SUB etc. pop 2)
 PRIMITIVE_OPERATIONS = {
     "+": (OpCode.ADD, None),
     "-": (OpCode.SUB, None),
     "*": (OpCode.MUL, None),
     "/": (OpCode.DIV, None),
-    # "%": (OpCode.MOD, None), # Assuming MOD opcode exists or will be added
     "=": (OpCode.EQ, None),
     ">": (OpCode.GT, None),
     "<": (OpCode.LT, None),
-    # ">=": (OpCode.GTE, None),
-    # "<=": (OpCode.LTE, None),
-    # "!=": (OpCode.NEQ, None), # Or (not (= ..))
-    "not": (OpCode.NOT, None),  # Expects 1 arg on stack
-    "print": (
-        OpCode.PRINT,
-        -1,
-    ),  # Special: print pops 1, but can be called with multiple args
-    # For now, let's assume (print expr) -> PUSH expr, PRINT
-    # If (print e1 e2), we'd need multiple PRINT opcodes or a loop.
-    # Let's simplify: (print e) -> gen(e), PRINT
-    # If multiple args to print, parser makes CallNode with multiple args.
-    # Codegen will handle this by emitting multiple PRINTs.
-    # List primitives might be more complex if they aren't direct opcodes
-    # "list": (OpCode.MAKE_LIST_OP, -1) # Example, if we had such an opcode
+    "not": (OpCode.NOT, None),
+    "print": (OpCode.PRINT, -1),
+    "is_nil": (OpCode.IS_NIL, None),
+    "cons": (OpCode.CONS, None),  # Expects [..., list, item] on stack for VM
+    "first": (OpCode.FIRST, None),
+    "rest": (OpCode.REST, None),
+    "list": (OpCode.MAKE_LIST, -1),
 }
 
 
@@ -86,10 +74,8 @@ class CodeGenerator:
     def __init__(self):
         self.bytecode: List[Union[tuple, str]] = []
         self.label_count = 0
-
         self.global_env: Dict[str, Any] = {}
         self.struct_definitions: Dict[str, List[str]] = {}
-
         self.compile_time_env_chain: List[Dict[str, str]] = [{"type": "global"}]
 
     def _new_label(self, prefix="L") -> str:
@@ -116,12 +102,10 @@ class CodeGenerator:
             self.compile_time_env_chain
             and self.compile_time_env_chain[-1]["type"] == "local"
         ):
-            if "vars" not in self.compile_time_env_chain[-1]:
-                self.compile_time_env_chain[-1]["vars"] = set()
             self.compile_time_env_chain[-1][name] = "local_variable"
         else:
             print(
-                f"Warning: Could not add '{name}' to current compile-time local scope. Current scope type: {self.compile_time_env_chain[-1]['type'] if self.compile_time_env_chain else 'None'}"
+                f"Warning: Could not add '{name}' to current compile-time local scope."
             )
 
     def generate_program(self, program_node: ProgramNode) -> List[Union[tuple, str]]:
@@ -130,29 +114,28 @@ class CodeGenerator:
         self.struct_definitions.clear()
         self.compile_time_env_chain = [{"type": "global"}]
 
-        # Process top-level forms. We might need multiple passes for `use` or forward declarations.
-        # For now, a single pass.
         for i, form in enumerate(program_node.forms):
             is_last_form = i == len(program_node.forms) - 1
             self._generate_top_level_form(form, is_last_form_in_program=is_last_form)
 
-        # Ensure HALT is the very last instruction if not already terminated by other means.
-        if not self.bytecode or not (
-            isinstance(self.bytecode[-1], tuple) and self.bytecode[-1][0] == OpCode.HALT
-        ):
-            # If the last generated instruction was RETURN (e.g. from a top-level function call that's the whole program)
-            # then we don't need an explicit HALT.
-            if not (
-                self.bytecode
-                and isinstance(self.bytecode[-1], tuple)
-                and self.bytecode[-1][0] == OpCode.RETURN
+        last_op_is_terminating = False
+        if self.bytecode:
+            last_instruction = self.bytecode[-1]
+            if isinstance(last_instruction, tuple) and last_instruction[0] in (
+                OpCode.HALT,
+                OpCode.RETURN,
+                OpCode.JUMP,
             ):
-                self._emit(OpCode.HALT)
+                last_op_is_terminating = True
+
+        if not last_op_is_terminating:
+            self._emit(OpCode.HALT)
         return self.bytecode
 
     def _generate_top_level_form(
         self, form: TopLevelForm, is_last_form_in_program: bool = False
     ):
+        start_bytecode_len = len(self.bytecode)
         if isinstance(form, StaticNode):
             self._generate_static_node(form)
         elif isinstance(form, FnNode):
@@ -163,17 +146,23 @@ class CodeGenerator:
             self._generate_use_node(form)
         elif isinstance(form, EXPRESSION_NODE_TYPES):
             self._generate_expression(form)
-            # If a top-level expression's result is not used and it's not the last form, POP it.
-            if not is_last_form_in_program:
-                # This is a simplification. If the expression has no side effects and its value
-                # isn't stored or printed, it should be popped.
-                # Example: (fn foo () 10) (foo) (static x 5) -> (foo) result should be popped.
-                # If the expression is the *very last thing* in the program, its value is the program's result.
-                self._emit(OpCode.POP)
+            if not is_last_form_in_program and len(self.bytecode) > start_bytecode_len:
+                last_instr_tuple = (
+                    self.bytecode[-1]
+                    if self.bytecode and isinstance(self.bytecode[-1], tuple)
+                    else None
+                )
+                if last_instr_tuple and last_instr_tuple[0] not in [
+                    OpCode.STORE,
+                    OpCode.JUMP,
+                    OpCode.RETURN,
+                    OpCode.HALT,
+                    OpCode.PRINT,
+                ]:
+                    self._emit(OpCode.POP)
         else:
             raise CodeGenerationError(f"Unsupported top-level form: {type(form)}")
 
-    # --- Expression Generators ---
     def _generate_expression(self, expr_node: Expression):
         if isinstance(expr_node, NumberNode):
             self._emit(OpCode.PUSH, expr_node.value)
@@ -216,16 +205,9 @@ class CodeGenerator:
         if isinstance(quoted_data, SymbolNode):
             self._emit(OpCode.PUSH, f"'{quoted_data.name}")
         elif isinstance(quoted_data, list):
-            temp_list_repr = []
-            for item in quoted_data:
-                if isinstance(item, SymbolNode):
-                    temp_list_repr.append(f"'{item.name}")
-                elif isinstance(item, list):
-                    temp_list_repr.append(self._generate_quoted_expression_value(item))
-                elif isinstance(item, QuoteNode):
-                    temp_list_repr.append(self._generate_quoted_expression_value(item))
-                else:
-                    temp_list_repr.append(item)
+            temp_list_repr = [
+                self._generate_quoted_expression_value(item) for item in quoted_data
+            ]
             self._emit(OpCode.PUSH, tuple(temp_list_repr))
         elif isinstance(quoted_data, QuoteNode):
             self._emit(OpCode.PUSH, self._generate_quoted_expression_value(quoted_data))
@@ -259,7 +241,6 @@ class CodeGenerator:
         entry_label = self._new_label(
             f"{'fn' if is_named_fn else 'lambda'}_{name_for_label}"
         )
-
         if is_named_fn:
             self._emit(OpCode.MAKE_CLOSURE, entry_label)
             self._emit(OpCode.STORE, name_for_label)
@@ -270,19 +251,15 @@ class CodeGenerator:
             }
         else:
             self._emit(OpCode.MAKE_CLOSURE, entry_label)
-
         end_body_label = self._new_label(
             f"end_{'fn' if is_named_fn else 'lambda'}_{name_for_label}"
         )
         self._emit(OpCode.JUMP, end_body_label)
-
         self._emit(entry_label + ":")
-
         self._enter_scope()
         for param_node in reversed(params):
             self._emit(OpCode.STORE, param_node.name)
             self._add_local_to_current_scope(param_node.name)
-
         if not body:
             self._emit(OpCode.PUSH, None)
         else:
@@ -290,7 +267,6 @@ class CodeGenerator:
                 self._generate_expression(expr)
                 if i < len(body) - 1:
                     self._emit(OpCode.POP)
-
         self._emit(OpCode.RETURN)
         self._exit_scope()
         self._emit(end_body_label + ":")
@@ -313,82 +289,72 @@ class CodeGenerator:
         self.global_env[node.name.name] = {"type": "struct_type", "fields": field_names}
 
     def _generate_call_node(self, node: CallNode):
-        # Check for primitive operations first
         if isinstance(node.callable_expr, SymbolNode):
             op_name = node.callable_expr.name
             if op_name in PRIMITIVE_OPERATIONS:
-                opcode, arity = PRIMITIVE_OPERATIONS[op_name]
+                opcode, arity_info = PRIMITIVE_OPERATIONS[op_name]
 
-                # Handle arguments for primitives that take them from stack (like ADD, SUB)
-                # These opcodes typically expect args to be pushed in a specific order.
-                # For binary ops like (+ a b), 'a' then 'b' is pushed. Opcode pops b then a.
-                if (
-                    arity is None
-                ):  # Opcode handles its own args from stack (e.g. ADD, GT)
-                    if len(node.arguments) != 2 and op_name not in [
-                        "not"
-                    ]:  # most binary ops
-                        if op_name == "not" and len(node.arguments) != 1:
-                            raise CodeGenerationError(
-                                f"Primitive '{op_name}' expects 1 argument, got {len(node.arguments)}"
-                            )
-                        elif op_name != "not":
-                            raise CodeGenerationError(
-                                f"Primitive '{op_name}' expects 2 arguments, got {len(node.arguments)}"
-                            )
+                if op_name == "print":
+                    if not node.arguments:
+                        self._emit(OpCode.PUSH, "")
+                        self._emit(OpCode.PRINT)
+                    else:
+                        for arg_expr in node.arguments:
+                            self._generate_expression(arg_expr)
+                            self._emit(OpCode.PRINT)
+                    self._emit(OpCode.PUSH, None)
+                    return
 
-                    # Arguments are pushed left-to-right by the loop below
+                elif op_name == "list":
                     for arg_expr in node.arguments:
                         self._generate_expression(arg_expr)
+                    self._emit(OpCode.MAKE_LIST, len(node.arguments))
+                    return
+
+                # For other primitives (arity_info is None)
+                if arity_info is None:
+                    expected_arity = 0
+                    is_binary_op_like_cons = False
+                    if op_name in ["+", "-", "*", "/", "=", ">", "<"]:
+                        expected_arity = 2
+                    elif op_name == "cons":
+                        expected_arity = 2
+                        is_binary_op_like_cons = True  # Special order for cons
+                    elif op_name in ["not", "is_nil", "first", "rest"]:
+                        expected_arity = 1
+
+                    if len(node.arguments) != expected_arity:
+                        raise CodeGenerationError(
+                            f"Primitive '{op_name}' expects {expected_arity} argument(s), got {len(node.arguments)}"
+                        )
+
+                    if is_binary_op_like_cons and op_name == "cons":
+                        # For (cons item list), VM expects [..., list, item]
+                        # So, generate list expression first, then item expression
+                        self._generate_expression(node.arguments[1])  # list_expr
+                        self._generate_expression(node.arguments[0])  # item_expr
+                    else:  # Default: push arguments left-to-right
+                        for arg_expr in node.arguments:
+                            self._generate_expression(arg_expr)
                     self._emit(opcode)
                     return
 
-                # Handle 'print' which can take multiple arguments
-                elif op_name == "print":
-                    if not node.arguments:  # (print) with no args
-                        # Could print newline or be an error. Let's say it prints newline (by pushing None then PRINT)
-                        # Or better, make (print) without args an error or no-op.
-                        # For now, let's assume (print) is an error, caught by arity check if we set arity > 0.
-                        # Let's assume (print expr) is the main form.
-                        # If (print e1 e2), codegen will emit gen(e1), PRINT, gen(e2), PRINT
-                        pass  # Will be handled by loop below
-                    for arg_expr in node.arguments:
-                        self._generate_expression(arg_expr)
-                        self._emit(opcode)  # Emit PRINT for each argument
-                    # 'print' itself doesn't leave a value on stack, VM's PRINT opcode handles that.
-                    # If (print) is the last expression, its "value" could be nil.
-                    # We need to push something if it's not the last expression in a sequence.
-                    # For now, let's assume print is like a statement.
-                    # To make (print a b) work as a single conceptual call leaving one value (e.g. nil):
-                    # This is complex. For now: multiple PRINT opcodes.
-                    # The 'print' function should probably return nil or its last argument.
-                    # Let's assume print returns nil.
-                    self._emit(
-                        OpCode.PUSH, None
-                    )  # Result of a (print ...) expression is nil
-                    return
-                # Add other arity checks as needed
-
-            # Check for struct instantiation
-            elif op_name in self.struct_definitions:
+            elif op_name in self.struct_definitions:  # Struct instantiation
                 struct_name = op_name
                 field_names = self.struct_definitions[struct_name]
                 if len(node.arguments) != len(field_names):
                     raise CodeGenerationError(
-                        f"Struct '{struct_name}' constructor called with {len(node.arguments)} arguments, "
-                        f"but expected {len(field_names)}."
+                        f"Struct '{struct_name}' constructor: expected {len(field_names)} args, got {len(node.arguments)}."
                     )
                 for arg_expr in node.arguments:
                     self._generate_expression(arg_expr)
                 self._emit(OpCode.MAKE_STRUCT, struct_name, tuple(field_names))
                 return
 
-        # Default: Regular user-defined function call or lambda call
+        # Generic call logic (user-defined functions, lambdas, or symbols not caught above)
         for arg_expr in node.arguments:
             self._generate_expression(arg_expr)
-        self._generate_expression(
-            node.callable_expr
-        )  # Closure should be on top of args
+        self._generate_expression(node.callable_expr)
         self._emit(OpCode.CALL, len(node.arguments))
 
     def _generate_if_node(self, node: IfNode):
@@ -408,7 +374,6 @@ class CodeGenerator:
             self._generate_expression(binding.value)
             self._emit(OpCode.STORE, binding.name.name)
             self._add_local_to_current_scope(binding.name.name)
-
         if not node.body:
             self._emit(OpCode.PUSH, None)
         else:
@@ -426,43 +391,27 @@ class CodeGenerator:
         self._generate_expression(node.instance)
         self._generate_expression(node.value)
         self._emit(OpCode.SET_FIELD, node.field_name.name)
-        # SET_FIELD in VM pushes the modified instance.
-        # Per common Lisp conventions, set! often returns the value assigned, or unspecified.
-        # If we want it to return the value: POP instance, PUSH value (already on stack before instance).
-        # For now, it returns the modified instance (as per VM). Let's POP it and PUSH nil
-        # to make (set ...) evaluate to nil, or the value.
-        # Let's decide (set ...) evaluates to the value that was set.
-        # Stack after SET_FIELD: [modified_instance]
-        # Value was on stack before instance. We need to preserve it or re-push.
-        # Simpler: (set ...) returns the modified instance. If value is needed, do (get ...) after.
-        # Current: SET_FIELD pushes instance. If (set p f v) is not last expr in seq, it should be POPped.
 
     def _generate_while_node(self, node: WhileNode):
         loop_start_label = self._new_label("while_start")
         loop_end_label = self._new_label("while_end")
-
         self._emit(loop_start_label + ":")
         self._generate_expression(node.condition)
         self._emit(OpCode.JUMP_IF_FALSE, loop_end_label)
-
         if not node.body:
             pass
         else:
             for i, expr in enumerate(node.body):
                 self._generate_expression(expr)
-                self._emit(
-                    OpCode.POP
-                )  # Results of while body expressions are discarded
-
+                self._emit(OpCode.POP)
         self._emit(OpCode.JUMP, loop_start_label)
         self._emit(loop_end_label + ":")
-        self._emit(OpCode.PUSH, None)  # While loop evaluates to nil
+        self._emit(OpCode.PUSH, None)
 
     def _generate_begin_node(self, node: BeginNode):
         if not node.expressions:
             self._emit(OpCode.PUSH, None)
             return
-
         for i, expr in enumerate(node.expressions):
             self._generate_expression(expr)
             if i < len(node.expressions) - 1:
@@ -481,7 +430,6 @@ if __name__ == "__main__":
 
     print("--- NotScheme Code Generator ---")
 
-    # Test cases (ensure they are valid NotScheme according to the spec)
     test_code_static = """(static a 10) (static b (+ 5 5))"""
     test_code_fn_def = """(fn add (x y) (+ x y)) (static result (add 10 20))"""
     test_code_struct_def = (
@@ -503,8 +451,8 @@ if __name__ == "__main__":
     (struct Pair (first second)) 
     (fn test_get_set ()
       (let p (Pair 10 20))
-      (set p second 30) // set returns the modified struct, which might be popped if not last
-      (get p second)    // This is the actual return value of the function
+      (set p second 30) 
+      (get p second)    
     )
     (test_get_set)
     """
@@ -528,9 +476,14 @@ if __name__ == "__main__":
         (+ temp 10)) 
     """
 
-    test_code_print = """
-    (print "Hello") 
-    (print (+ 10 20))
+    test_code_list_ops = """
+    (static my_list (list 1 (+ 1 1) "three")) 
+    (print (first my_list))                     
+    (print (rest my_list))                      
+    (static my_list2 (cons 0 my_list))  // item is 0, list is my_list        
+    (print my_list2)
+    (print (is_nil nil))                        
+    (print (is_nil my_list2))                   
     """
 
     tests = {
@@ -543,7 +496,7 @@ if __name__ == "__main__":
         "Get/Set Struct Fields (in Fn)": test_code_get_set_in_fn,
         "While Loop (Corrected Set)": test_code_while_correct_set,
         "Begin Expression": test_code_begin_expr,
-        "Print Expressions": test_code_print,
+        "List Operations": test_code_list_ops,
     }
 
     for name, code in tests.items():

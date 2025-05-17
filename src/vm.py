@@ -1,7 +1,7 @@
 import sys
 from enum import Enum
 import collections
-import copy  # Needed for deep copying environments for closures
+import copy
 
 # --- Closure Representation ---
 Closure = collections.namedtuple("Closure", ["code_label", "defining_env"])
@@ -9,6 +9,10 @@ Closure = collections.namedtuple("Closure", ["code_label", "defining_env"])
 # --- Struct Instance Representation ---
 # Structs will be represented as dictionaries with a special key for their type.
 # e.g., {'__type__': 'Point', 'x_coord': 10, 'y_coord': 20}
+
+# --- List Representation ---
+# NotScheme lists will be Python lists.
+# NotScheme nil will be Python None.
 
 
 # --- Instruction Set Definition ---
@@ -41,11 +45,16 @@ class OpCode(Enum):
     RETURN = 51  # Return from function.
 
     # Struct Operations
-    MAKE_STRUCT = (
-        55  # Operands: struct_name_str, field_names_tuple (for creating dict keys)
-    )
+    MAKE_STRUCT = 55  # Operands: struct_name_str, field_names_tuple
     GET_FIELD = 56  # Operand: field_name_str
     SET_FIELD = 57  # Operand: field_name_str
+
+    # List Primitives
+    IS_NIL = 70  # Pops value, pushes True if None, else False.
+    CONS = 71  # Pops item, pops list. Pushes [item] + list.
+    FIRST = 72  # Pops list, pushes its first element. (car)
+    REST = 73  # Pops list, pushes list[1:]. (cdr)
+    MAKE_LIST = 74  # Operand: arg_count. Pops arg_count items, creates list.
 
     # VM Control
     HALT = 60  # Stop execution.
@@ -110,7 +119,6 @@ class VirtualMachine:
             current_ip_for_error_reporting = self.ip
 
             try:
-                # Ensure instruction_to_execute is a tuple before trying to subscript it
                 if not isinstance(instruction_to_execute, tuple):
                     raise TypeError(
                         f"Malformed instruction: expected a tuple, got {type(instruction_to_execute)} value {instruction_to_execute!r}"
@@ -118,7 +126,7 @@ class VirtualMachine:
 
                 opcode = instruction_to_execute[0]
                 args = instruction_to_execute[1:]
-            except TypeError as te:  # Catch the specific error if instruction_to_execute is not subscriptable
+            except TypeError as te:
                 print(f"\n--- VM Setup Error ---")
                 print(f"Error: {te}")
                 print(f"Instruction Pointer (IP): {current_ip_for_error_reporting}")
@@ -129,10 +137,10 @@ class VirtualMachine:
                     f"Ensure all bytecode instructions are tuples, e.g., (OpCode.POP,) not OpCode.POP."
                 )
                 print(f"---------------------")
-                self.ip = code_len  # Halt execution
+                self.ip = code_len
                 break
 
-            self.ip += 1  # Increment IP after successfully fetching opcode and args
+            self.ip += 1
 
             try:
                 if opcode == OpCode.PUSH:
@@ -219,7 +227,7 @@ class VirtualMachine:
                     self.operand_stack.append(closure)
                 elif opcode == OpCode.CALL:
                     arg_count = args[0]
-                    if len(self.operand_stack) < arg_count + 1:  # Need args + closure
+                    if len(self.operand_stack) < arg_count + 1:
                         raise IndexError(
                             f"CALL expected {arg_count} arguments and a closure, stack too small: {len(self.operand_stack)}"
                         )
@@ -270,12 +278,12 @@ class VirtualMachine:
                         )
                     instance = self.operand_stack.pop()
                     if not isinstance(instance, dict) or "__type__" not in instance:
-                        self.operand_stack.append(instance)  # Push back for error state
+                        self.operand_stack.append(instance)
                         raise TypeError(
                             f"GET_FIELD '{field_name_str}' expected a struct instance, got {type(instance)}."
                         )
                     if field_name_str not in instance:
-                        self.operand_stack.append(instance)  # Push back for error state
+                        self.operand_stack.append(instance)
                         raise AttributeError(
                             f"Struct type '{instance['__type__']}' has no field '{field_name_str}'."
                         )
@@ -302,6 +310,60 @@ class VirtualMachine:
                         )
                     instance[field_name_str] = new_value
                     self.operand_stack.append(instance)
+
+                # --- List Primitives ---
+                elif opcode == OpCode.IS_NIL:
+                    if not self.operand_stack:
+                        raise IndexError("IS_NIL requires one operand")
+                    val = self.operand_stack.pop()
+                    self.operand_stack.append(val is None)
+                elif opcode == OpCode.CONS:
+                    if len(self.operand_stack) < 2:
+                        raise IndexError("CONS requires item and list")
+                    # Stack order: [..., list, item] (item is on top)
+                    item = self.operand_stack.pop()
+                    lst = self.operand_stack.pop()
+                    if lst is None:
+                        self.operand_stack.append([item])
+                    elif not isinstance(lst, list):
+                        self.operand_stack.append(lst)  # Push back incorrect type
+                        self.operand_stack.append(item)  # Push back item
+                        raise TypeError(
+                            f"CONS expects a list or nil as its second argument (list part), got {type(lst)}"
+                        )
+                    else:
+                        self.operand_stack.append([item] + lst)
+                elif opcode == OpCode.FIRST:
+                    if not self.operand_stack:
+                        raise IndexError("FIRST requires a list")
+                    lst = self.operand_stack.pop()
+                    if not isinstance(lst, list) or not lst:
+                        self.operand_stack.append(lst)
+                        raise TypeError(
+                            f"FIRST expects a non-empty list, got {type(lst) if isinstance(lst, list) else lst}"
+                        )
+                    self.operand_stack.append(lst[0])
+                elif opcode == OpCode.REST:
+                    if not self.operand_stack:
+                        raise IndexError("REST requires a list")
+                    lst = self.operand_stack.pop()
+                    if not isinstance(lst, list) or not lst:
+                        self.operand_stack.append(lst)
+                        raise TypeError(
+                            f"REST expects a non-empty list, got {type(lst) if isinstance(lst, list) else lst}"
+                        )
+                    self.operand_stack.append(lst[1:] if len(lst) > 1 else None)
+                elif opcode == OpCode.MAKE_LIST:
+                    arg_count = args[0]
+                    if len(self.operand_stack) < arg_count:
+                        raise IndexError(
+                            f"MAKE_LIST expected {arg_count} items on stack, found {len(self.operand_stack)}"
+                        )
+                    new_list = []
+                    for _ in range(arg_count):
+                        new_list.insert(0, self.operand_stack.pop())
+                    self.operand_stack.append(new_list)
+
                 elif opcode == OpCode.HALT:
                     print("Execution halted.")
                     self.ip = code_len
@@ -340,27 +402,48 @@ class VirtualMachine:
 
 if __name__ == "__main__":
     print("Virtual Machine definition loaded.")
-    print("To run tests, please execute 'test.py' or run specific bytecode here.")
+    print("To run tests, please execute 'vm_tests.py' or run specific bytecode here.")
 
-    print("\n--- VM Struct Operations Test ---")
-    struct_test_code = [
+    print("\n--- VM List Operations Test ---")
+    list_test_code = [
+        # (list 1 2 3) -> [1, 2, 3]
+        (OpCode.PUSH, 1),
+        (OpCode.PUSH, 2),
+        (OpCode.PUSH, 3),
+        (OpCode.MAKE_LIST, 3),
+        (OpCode.STORE, "my_list"),
+        # (first my_list) -> 1
+        (OpCode.LOAD, "my_list"),
+        (OpCode.FIRST,),
+        (OpCode.PRINT,),  # Output: 1
+        # (rest my_list) -> [2, 3]
+        (OpCode.LOAD, "my_list"),
+        (OpCode.REST,),
+        (OpCode.STORE, "my_list_rest"),
+        (OpCode.LOAD, "my_list_rest"),
+        (OpCode.PRINT,),  # Output: [2, 3]
+        # (cons 0 my_list_rest) -> [0, 2, 3]
+        # Corrected order: push list, then item for CONS
+        (OpCode.LOAD, "my_list_rest"),  # Push the list [2,3]
+        (OpCode.PUSH, 0),  # Push the item 0 (this will be on top)
+        (OpCode.CONS,),
+        (OpCode.PRINT,),  # Output: [0, 2, 3]
+        # (is_nil nil) -> True
+        (OpCode.PUSH, None),
+        (OpCode.IS_NIL,),
+        (OpCode.PRINT,),  # Output: True
+        # (is_nil my_list) -> False
+        (OpCode.LOAD, "my_list"),
+        (OpCode.IS_NIL,),
+        (OpCode.PRINT,),  # Output: False
+        # (rest (list 10)) -> nil (None)
         (OpCode.PUSH, 10),
-        (OpCode.PUSH, 20),
-        (OpCode.MAKE_STRUCT, "Point", ("x_coord", "y_coord")),
-        (OpCode.STORE, "p"),
-        (OpCode.LOAD, "p"),
-        (OpCode.PUSH, 25),
-        (OpCode.SET_FIELD, "y_coord"),
-        (OpCode.POP,),  # This is a tuple: (OpCode.POP,)
-        (OpCode.LOAD, "p"),
-        (OpCode.GET_FIELD, "x_coord"),
-        (OpCode.PRINT,),  # This is a tuple: (OpCode.PRINT,)
-        (OpCode.LOAD, "p"),
-        (OpCode.GET_FIELD, "y_coord"),
-        (OpCode.PRINT,),  # This is a tuple: (OpCode.PRINT,)
-        (OpCode.HALT,),  # This is a tuple: (OpCode.HALT,)
+        (OpCode.MAKE_LIST, 1),
+        (OpCode.REST,),
+        (OpCode.PRINT,),  # Output: None
+        (OpCode.HALT,),
     ]
-    vm_struct_test = VirtualMachine(struct_test_code)
-    result = vm_struct_test.run()
-    print(f"Final result from struct test: {result}")
+    vm_list_test = VirtualMachine(list_test_code)
+    result = vm_list_test.run()
+    print(f"Final result from list test (should be None due to HALT): {result}")
     print("---------------------------------")
