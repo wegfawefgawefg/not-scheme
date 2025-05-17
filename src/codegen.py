@@ -26,10 +26,9 @@ from ast_nodes import (
     Expression,
     TopLevelForm,
 )
-from vm import OpCode  # Assuming vm.py is accessible
+from vm import OpCode, QuotedSymbol  # Import QuotedSymbol from vm
 from typing import List, Dict, Any, Tuple, Union, get_args
 
-# Define a tuple of all concrete AST node types that are considered Expressions
 EXPRESSION_NODE_TYPES = (
     NumberNode,
     StringNode,
@@ -63,7 +62,7 @@ PRIMITIVE_OPERATIONS = {
     "not": (OpCode.NOT, None),
     "print": (OpCode.PRINT, -1),
     "is_nil": (OpCode.IS_NIL, None),
-    "cons": (OpCode.CONS, None),  # Expects [..., list, item] on stack for VM
+    "cons": (OpCode.CONS, None),
     "first": (OpCode.FIRST, None),
     "rest": (OpCode.REST, None),
     "list": (OpCode.MAKE_LIST, -1),
@@ -113,29 +112,21 @@ class CodeGenerator:
         self.global_env.clear()
         self.struct_definitions.clear()
         self.compile_time_env_chain = [{"type": "global"}]
-
         for i, form in enumerate(program_node.forms):
-            is_last_form = i == len(program_node.forms) - 1
-            self._generate_top_level_form(form, is_last_form_in_program=is_last_form)
-
-        last_op_is_terminating = False
-        if self.bytecode:
-            last_instruction = self.bytecode[-1]
-            if isinstance(last_instruction, tuple) and last_instruction[0] in (
-                OpCode.HALT,
-                OpCode.RETURN,
-                OpCode.JUMP,
-            ):
-                last_op_is_terminating = True
-
-        if not last_op_is_terminating:
+            self._generate_top_level_form(
+                form, is_last_form_in_program=(i == len(program_node.forms) - 1)
+            )
+        if not self.bytecode or not (
+            isinstance(self.bytecode[-1], tuple)
+            and self.bytecode[-1][0] in (OpCode.HALT, OpCode.RETURN, OpCode.JUMP)
+        ):
             self._emit(OpCode.HALT)
         return self.bytecode
 
     def _generate_top_level_form(
         self, form: TopLevelForm, is_last_form_in_program: bool = False
     ):
-        start_bytecode_len = len(self.bytecode)
+        start_len = len(self.bytecode)
         if isinstance(form, StaticNode):
             self._generate_static_node(form)
         elif isinstance(form, FnNode):
@@ -146,19 +137,15 @@ class CodeGenerator:
             self._generate_use_node(form)
         elif isinstance(form, EXPRESSION_NODE_TYPES):
             self._generate_expression(form)
-            if not is_last_form_in_program and len(self.bytecode) > start_bytecode_len:
-                last_instr_tuple = (
-                    self.bytecode[-1]
-                    if self.bytecode and isinstance(self.bytecode[-1], tuple)
-                    else None
-                )
-                if last_instr_tuple and last_instr_tuple[0] not in [
+            if not is_last_form_in_program and len(self.bytecode) > start_len:
+                last_instr = self.bytecode[-1]
+                if isinstance(last_instr, tuple) and last_instr[0] not in (
                     OpCode.STORE,
                     OpCode.JUMP,
                     OpCode.RETURN,
                     OpCode.HALT,
                     OpCode.PRINT,
-                ]:
+                ):
                     self._emit(OpCode.POP)
         else:
             raise CodeGenerationError(f"Unsupported top-level form: {type(form)}")
@@ -175,7 +162,9 @@ class CodeGenerator:
         elif isinstance(expr_node, SymbolNode):
             self._emit(OpCode.LOAD, expr_node.name)
         elif isinstance(expr_node, QuoteNode):
-            self._generate_quoted_expression(expr_node.expression)
+            self._generate_quote_node(
+                expr_node
+            )  # Changed from _generate_quoted_expression
         elif isinstance(expr_node, CallNode):
             self._generate_call_node(expr_node)
         elif isinstance(expr_node, IfNode):
@@ -197,34 +186,59 @@ class CodeGenerator:
                 f"Definition node {type(expr_node)} found in expression context."
             )
         else:
-            raise CodeGenerationError(
-                f"Unsupported expression type in _generate_expression: {type(expr_node)}"
-            )
+            raise CodeGenerationError(f"Unsupported expression type: {type(expr_node)}")
 
-    def _generate_quoted_expression(self, quoted_data: Any):
-        if isinstance(quoted_data, SymbolNode):
-            self._emit(OpCode.PUSH, f"'{quoted_data.name}")
-        elif isinstance(quoted_data, list):
-            temp_list_repr = [
-                self._generate_quoted_expression_value(item) for item in quoted_data
-            ]
-            self._emit(OpCode.PUSH, tuple(temp_list_repr))
-        elif isinstance(quoted_data, QuoteNode):
-            self._emit(OpCode.PUSH, self._generate_quoted_expression_value(quoted_data))
+    def _generate_runtime_value_for_quoted_item(self, item_data: Any):
+        """
+        Generates bytecode to PUSH the runtime representation of a single item
+        found within a quoted structure.
+        - Quoted symbols become QuotedSymbol objects.
+        - Quoted lists become runtime lists of such items.
+        - Literals (numbers, strings, booleans, nil) are pushed as their Python equivalents.
+        - Nested QuoteNodes mean we're creating a list like (quote actual_item).
+        """
+        if isinstance(
+            item_data, SymbolNode
+        ):  # e.g. 'foo from parser's QuoteNode(SymbolNode('foo'))
+            self._emit(OpCode.PUSH, QuotedSymbol(name=item_data.name))
+        elif isinstance(
+            item_data, list
+        ):  # This is a parsed quoted list e.g. from '(a b) -> [SymbolNode('a'), SymbolNode('b')]
+            for sub_item in item_data:
+                self._generate_runtime_value_for_quoted_item(
+                    sub_item
+                )  # Push each element's runtime form
+            self._emit(OpCode.MAKE_LIST, len(item_data))  # Construct the list
+        elif isinstance(
+            item_data, QuoteNode
+        ):  # e.g. ' 'a  or '(quote a) from parser -> QuoteNode(QuoteNode(SymbolNode('a')))
+            # This means we want to create the structure (list 'quote <inner_quoted_value>)
+            self._emit(
+                OpCode.PUSH, QuotedSymbol(name="quote")
+            )  # Push the symbol 'quote'
+            self._generate_runtime_value_for_quoted_item(
+                item_data.expression
+            )  # Push the runtime value of what's inside the inner quote
+            self._emit(OpCode.MAKE_LIST, 2)  # Create (list 'quote <inner_value>)
+        elif isinstance(item_data, (int, float, str, bool)) or item_data is None:
+            # These are Python primitives that the parser's _parse_quoted_s_expression
+            # returns for literal numbers, strings, booleans, nil inside a quote.
+            self._emit(OpCode.PUSH, item_data)
         else:
-            self._emit(OpCode.PUSH, quoted_data)
-
-    def _generate_quoted_expression_value(self, data: Any) -> Any:
-        if isinstance(data, SymbolNode):
-            return f"'{data.name}"
-        elif isinstance(data, list):
-            return tuple(self._generate_quoted_expression_value(item) for item in data)
-        elif isinstance(data, QuoteNode):
-            return (
-                SymbolNode(name="quote").name,
-                self._generate_quoted_expression_value(data.expression),
+            # This case might be hit if _parse_quoted_s_expression returns other AST nodes directly
+            # for atoms, which it currently doesn't (it returns Python values).
+            raise CodeGenerationError(
+                f"Cannot generate runtime value for quoted item of type: {type(item_data)}, value: {item_data!r}"
             )
-        return data
+
+    def _generate_quote_node(self, node: QuoteNode):
+        """
+        Generates code for a QuoteNode. The node.expression is what's being quoted.
+        Example: 'foo -> QuoteNode(SymbolNode('foo'))
+                 '(a b) -> QuoteNode([SymbolNode('a'), SymbolNode('b')])
+                 ''foo -> QuoteNode(QuoteNode(SymbolNode('foo')))
+        """
+        self._generate_runtime_value_for_quoted_item(node.expression)
 
     def _generate_static_node(self, node: StaticNode):
         self._generate_expression(node.value)
@@ -293,7 +307,6 @@ class CodeGenerator:
             op_name = node.callable_expr.name
             if op_name in PRIMITIVE_OPERATIONS:
                 opcode, arity_info = PRIMITIVE_OPERATIONS[op_name]
-
                 if op_name == "print":
                     if not node.arguments:
                         self._emit(OpCode.PUSH, "")
@@ -304,62 +317,47 @@ class CodeGenerator:
                             self._emit(OpCode.PRINT)
                     self._emit(OpCode.PUSH, None)
                     return
-
                 elif op_name == "list":
                     for arg_expr in node.arguments:
                         self._generate_expression(arg_expr)
                     self._emit(OpCode.MAKE_LIST, len(node.arguments))
                     return
-
-                # For other primitives (arity_info is None)
                 if arity_info is None:
                     expected_arity = 0
-                    is_binary_op_like_cons = False
-                    if op_name in ["+", "-", "*", "/", "=", ">", "<"]:
+                    is_cons_op = op_name == "cons"
+                    if op_name in ["+", "-", "*", "/", "=", ">", "<", "cons"]:
                         expected_arity = 2
-                    elif op_name == "cons":
-                        expected_arity = 2
-                        is_binary_op_like_cons = True  # Special order for cons
                     elif op_name in ["not", "is_nil", "first", "rest"]:
                         expected_arity = 1
-
                     if len(node.arguments) != expected_arity:
                         raise CodeGenerationError(
-                            f"Primitive '{op_name}' expects {expected_arity} argument(s), got {len(node.arguments)}"
+                            f"Primitive '{op_name}' expects {expected_arity} args, got {len(node.arguments)}"
                         )
-
-                    if is_binary_op_like_cons and op_name == "cons":
-                        # For (cons item list), VM expects [..., list, item]
-                        # So, generate list expression first, then item expression
-                        self._generate_expression(node.arguments[1])  # list_expr
-                        self._generate_expression(node.arguments[0])  # item_expr
-                    else:  # Default: push arguments left-to-right
+                    if is_cons_op:
+                        self._generate_expression(node.arguments[1])
+                        self._generate_expression(node.arguments[0])
+                    else:
                         for arg_expr in node.arguments:
                             self._generate_expression(arg_expr)
                     self._emit(opcode)
                     return
-
-            elif op_name in self.struct_definitions:  # Struct instantiation
-                struct_name = op_name
-                field_names = self.struct_definitions[struct_name]
+            elif op_name in self.struct_definitions:
+                struct_name, field_names = op_name, self.struct_definitions[op_name]
                 if len(node.arguments) != len(field_names):
                     raise CodeGenerationError(
-                        f"Struct '{struct_name}' constructor: expected {len(field_names)} args, got {len(node.arguments)}."
+                        f"Struct '{struct_name}': expected {len(field_names)} args, got {len(node.arguments)}."
                     )
                 for arg_expr in node.arguments:
                     self._generate_expression(arg_expr)
                 self._emit(OpCode.MAKE_STRUCT, struct_name, tuple(field_names))
                 return
-
-        # Generic call logic (user-defined functions, lambdas, or symbols not caught above)
         for arg_expr in node.arguments:
             self._generate_expression(arg_expr)
         self._generate_expression(node.callable_expr)
         self._emit(OpCode.CALL, len(node.arguments))
 
     def _generate_if_node(self, node: IfNode):
-        else_label = self._new_label("else")
-        end_if_label = self._new_label("end_if")
+        else_label, end_if_label = self._new_label("else"), self._new_label("end_if")
         self._generate_expression(node.condition)
         self._emit(OpCode.JUMP_IF_FALSE, else_label)
         self._generate_expression(node.then_branch)
@@ -393,19 +391,19 @@ class CodeGenerator:
         self._emit(OpCode.SET_FIELD, node.field_name.name)
 
     def _generate_while_node(self, node: WhileNode):
-        loop_start_label = self._new_label("while_start")
-        loop_end_label = self._new_label("while_end")
-        self._emit(loop_start_label + ":")
+        start_label, end_label = (
+            self._new_label("while_start"),
+            self._new_label("while_end"),
+        )
+        self._emit(start_label + ":")
         self._generate_expression(node.condition)
-        self._emit(OpCode.JUMP_IF_FALSE, loop_end_label)
-        if not node.body:
-            pass
-        else:
-            for i, expr in enumerate(node.body):
+        self._emit(OpCode.JUMP_IF_FALSE, end_label)
+        if node.body:
+            for expr in node.body:
                 self._generate_expression(expr)
                 self._emit(OpCode.POP)
-        self._emit(OpCode.JUMP, loop_start_label)
-        self._emit(loop_end_label + ":")
+        self._emit(OpCode.JUMP, start_label)
+        self._emit(end_label + ":")
         self._emit(OpCode.PUSH, None)
 
     def _generate_begin_node(self, node: BeginNode):
@@ -418,9 +416,7 @@ class CodeGenerator:
                 self._emit(OpCode.POP)
 
     def _generate_use_node(self, node: UseNode):
-        print(
-            f"Warning: 'use' statement for module '{node.module_name.name}' encountered. Module processing not yet implemented."
-        )
+        print(f"Warning: 'use' for '{node.module_name.name}' not implemented.")
         pass
 
 
@@ -428,80 +424,19 @@ if __name__ == "__main__":
     from lexer import tokenize, LexerError
     from parser import Parser, ParserError
 
-    print("--- NotScheme Code Generator ---")
+    print("--- NotScheme Code Generator (Quote Test Focus) ---")
 
-    test_code_static = """(static a 10) (static b (+ 5 5))"""
-    test_code_fn_def = """(fn add (x y) (+ x y)) (static result (add 10 20))"""
-    test_code_struct_def = (
-        """(struct Point (x_coord y_coord)) (static p1 (Point 1 2))"""
-    )
-    test_code_if_expr = """(static x 10) (static if_result (if (> x 5) 100 200))"""
-    test_code_let_expr = """
-    (fn test_let ()
-        (let ((a 10) (b (+ a 5))) 
-            (+ a b)))
-    (test_let) 
-    """
-    test_code_lambda_expr = """
-    (static my_adder ((lambda (val_to_add) (lambda (x) (+ x val_to_add))) 5))
-    (my_adder 10) 
-    """
-
-    test_code_get_set_in_fn = """
-    (struct Pair (first second)) 
-    (fn test_get_set ()
-      (let p (Pair 10 20))
-      (set p second 30) 
-      (get p second)    
-    )
-    (test_get_set)
-    """
-
-    test_code_while_correct_set = """
-    (struct Counter (value current_sum))
-    (fn test_while ()
-      (let c (Counter 0 0))
-      (while (< (get c value) 3)
-        (set c current_sum (+ (get c current_sum) (get c value)))
-        (set c value (+ (get c value) 1))
-      )
-      (get c current_sum) 
-    )
-    (test_while)
-    """
-
-    test_code_begin_expr = """
-    (begin 
-        (let temp 5) 
-        (+ temp 10)) 
-    """
-
-    test_code_list_ops = """
-    (static my_list (list 1 (+ 1 1) "three")) 
-    (print (first my_list))                     
-    (print (rest my_list))                      
-    (static my_list2 (cons 0 my_list))  // item is 0, list is my_list        
-    (print my_list2)
-    (print (is_nil nil))                        
-    (print (is_nil my_list2))                   
-    """
-
-    tests = {
-        "Static Vars": test_code_static,
-        "Function Def & Call": test_code_fn_def,
-        "Struct Def & Instance": test_code_struct_def,
-        "If Expression": test_code_if_expr,
-        "Let Expression": test_code_let_expr,
-        "Lambda Expression": test_code_lambda_expr,
-        "Get/Set Struct Fields (in Fn)": test_code_get_set_in_fn,
-        "While Loop (Corrected Set)": test_code_while_correct_set,
-        "Begin Expression": test_code_begin_expr,
-        "List Operations": test_code_list_ops,
+    quote_tests = {
+        "Simple Symbol Quote": "(print 'my_symbol)",
+        "Simple List Quote": "(print '(item1 10 true nil))",
+        "Nested Symbol Quote": "(print ''another_symbol)",
+        "List with Nested Quote": "(print '(a 'b c))",
+        "Quote of Empty List": "(print '())",
     }
 
-    for name, code in tests.items():
+    for name, code in quote_tests.items():
         print(f"\n--- Generating code for: {name} ---")
-        # print(code)
+        print(f"Source: {code}")
         try:
             tokens = tokenize(code)
             parser = Parser(tokens)
@@ -520,17 +455,29 @@ if __name__ == "__main__":
 
             traceback.print_exc()
 
-    test_code_unsupported_expr = """
-    (use my_module (something)) 
-    """
-    print(f"\n--- Generating code for: Unsupported (UseNode) ---")
-    try:
-        tokens = tokenize(test_code_unsupported_expr)
-        parser = Parser(tokens)
-        ast = parser.parse_program()
-        codegen = CodeGenerator()
-        bytecode = codegen.generate_program(ast)
-    except (LexerError, ParserError, CodeGenerationError) as e:
-        print(
-            f"Caught expected warning/behavior for 'UseNode' (or error if strict): {e}"
-        )
+    print("\n--- Codegen tests from previous run (condensed) ---")
+    previous_tests = {
+        "Static Vars": """(static a 10) (static b (+ 5 5))""",
+        "List Operations": """
+            (static my_list (list 1 (+ 1 1) "three")) 
+            (print (first my_list))                     
+            (print (rest my_list))                      
+            (static my_list2 (cons 0 my_list))          
+            (print my_list2)
+            (print (is_nil nil))                        
+            (print (is_nil my_list2))                   
+        """,
+    }
+    for name, code in previous_tests.items():
+        print(f"\n--- Generating code for: {name} ---")
+        try:
+            tokens = tokenize(code)
+            parser = Parser(tokens)
+            ast = parser.parse_program()
+            codegen = CodeGenerator()
+            bytecode = codegen.generate_program(ast)
+            print("\nGenerated Bytecode:")
+            for i, instruction in enumerate(bytecode):
+                print(f"{i:03d}: {instruction}")
+        except Exception as e:
+            print(f"Error for '{name}': {e}")

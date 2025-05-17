@@ -6,6 +6,9 @@ import copy
 # --- Closure Representation ---
 Closure = collections.namedtuple("Closure", ["code_label", "defining_env"])
 
+# --- Quoted Symbol Representation ---
+QuotedSymbol = collections.namedtuple("QuotedSymbol", ["name"])
+
 # --- Struct Instance Representation ---
 # Structs will be represented as dictionaries with a special key for their type.
 # e.g., {'__type__': 'Point', 'x_coord': 10, 'y_coord': 20}
@@ -311,7 +314,6 @@ class VirtualMachine:
                     instance[field_name_str] = new_value
                     self.operand_stack.append(instance)
 
-                # --- List Primitives ---
                 elif opcode == OpCode.IS_NIL:
                     if not self.operand_stack:
                         raise IndexError("IS_NIL requires one operand")
@@ -320,14 +322,13 @@ class VirtualMachine:
                 elif opcode == OpCode.CONS:
                     if len(self.operand_stack) < 2:
                         raise IndexError("CONS requires item and list")
-                    # Stack order: [..., list, item] (item is on top)
                     item = self.operand_stack.pop()
                     lst = self.operand_stack.pop()
                     if lst is None:
                         self.operand_stack.append([item])
                     elif not isinstance(lst, list):
-                        self.operand_stack.append(lst)  # Push back incorrect type
-                        self.operand_stack.append(item)  # Push back item
+                        self.operand_stack.append(lst)
+                        self.operand_stack.append(item)
                         raise TypeError(
                             f"CONS expects a list or nil as its second argument (list part), got {type(lst)}"
                         )
@@ -372,7 +373,9 @@ class VirtualMachine:
                     if not self.operand_stack:
                         raise IndexError("PRINT requires a value on the stack")
                     value = self.operand_stack.pop()
-                    print("Output:", value)
+                    print(
+                        "Output:", value
+                    )  # This will use Python's default str/repr for QuotedSymbol
                 else:
                     raise RuntimeError(f"Unknown opcode encountered: {opcode}")
 
@@ -402,48 +405,15 @@ class VirtualMachine:
 
 if __name__ == "__main__":
     print("Virtual Machine definition loaded.")
-    print("To run tests, please execute 'vm_tests.py' or run specific bytecode here.")
+    print("To run tests, please execute 'vm_tests.py'.")
 
-    print("\n--- VM List Operations Test ---")
-    list_test_code = [
-        # (list 1 2 3) -> [1, 2, 3]
-        (OpCode.PUSH, 1),
-        (OpCode.PUSH, 2),
-        (OpCode.PUSH, 3),
-        (OpCode.MAKE_LIST, 3),
-        (OpCode.STORE, "my_list"),
-        # (first my_list) -> 1
-        (OpCode.LOAD, "my_list"),
-        (OpCode.FIRST,),
-        (OpCode.PRINT,),  # Output: 1
-        # (rest my_list) -> [2, 3]
-        (OpCode.LOAD, "my_list"),
-        (OpCode.REST,),
-        (OpCode.STORE, "my_list_rest"),
-        (OpCode.LOAD, "my_list_rest"),
-        (OpCode.PRINT,),  # Output: [2, 3]
-        # (cons 0 my_list_rest) -> [0, 2, 3]
-        # Corrected order: push list, then item for CONS
-        (OpCode.LOAD, "my_list_rest"),  # Push the list [2,3]
-        (OpCode.PUSH, 0),  # Push the item 0 (this will be on top)
-        (OpCode.CONS,),
-        (OpCode.PRINT,),  # Output: [0, 2, 3]
-        # (is_nil nil) -> True
-        (OpCode.PUSH, None),
-        (OpCode.IS_NIL,),
-        (OpCode.PRINT,),  # Output: True
-        # (is_nil my_list) -> False
-        (OpCode.LOAD, "my_list"),
-        (OpCode.IS_NIL,),
-        (OpCode.PRINT,),  # Output: False
-        # (rest (list 10)) -> nil (None)
-        (OpCode.PUSH, 10),
-        (OpCode.MAKE_LIST, 1),
-        (OpCode.REST,),
-        (OpCode.PRINT,),  # Output: None
+    # Example of pushing and printing a QuotedSymbol
+    print("\n--- VM QuotedSymbol Test ---")
+    qs_test_code = [
+        (OpCode.PUSH, QuotedSymbol(name="my_symbol")),
+        (OpCode.PRINT,),
         (OpCode.HALT,),
     ]
-    vm_list_test = VirtualMachine(list_test_code)
-    result = vm_list_test.run()
-    print(f"Final result from list test (should be None due to HALT): {result}")
-    print("---------------------------------")
+    vm_qs_test = VirtualMachine(qs_test_code)
+    vm_qs_test.run()
+    print("-----------------------------")

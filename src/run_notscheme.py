@@ -5,7 +5,7 @@ from lexer import tokenize, LexerError
 from parser import Parser, ParserError
 from ast_nodes import ProgramNode
 from codegen import CodeGenerator, CodeGenerationError
-from vm import VirtualMachine, OpCode
+from vm import VirtualMachine, OpCode, QuotedSymbol  # Import QuotedSymbol
 
 import io
 import sys
@@ -103,9 +103,24 @@ def run_notscheme_test(
                     for line in actual_prints_text.split("\n")
                     if line.strip() and line.strip() != "Execution halted."
                 ]
+
                 formatted_expected_prints = []
                 for p_val in expected_prints:
-                    if p_val is True:
+                    # Format expected values to match Python's default print output for these types
+                    if isinstance(p_val, QuotedSymbol):
+                        formatted_expected_prints.append(
+                            f"Output: {p_val!r}"
+                        )  # Use repr for namedtuple
+                    elif isinstance(
+                        p_val, list
+                    ):  # For lists containing QuotedSymbols or other values
+                        # Manually construct the expected string representation for lists
+                        # to match how Python's print formats lists of these objects.
+                        list_content_str = ", ".join(repr(item) for item in p_val)
+                        formatted_expected_prints.append(
+                            f"Output: [{list_content_str}]"
+                        )
+                    elif p_val is True:
                         formatted_expected_prints.append("Output: True")
                     elif p_val is False:
                         formatted_expected_prints.append("Output: False")
@@ -126,9 +141,7 @@ def run_notscheme_test(
                     print(f"Result: PASS (Expected: {expected_value}, Got: {result})")
                 else:
                     print(f"Result: FAIL (Expected: {expected_value}, Got: {result})")
-            elif (
-                expected_prints and expected_value is None
-            ):  # Check if result is None when prints are primary
+            elif expected_prints and expected_value is None:
                 if result is None:
                     print(f"Result: PASS (Expected: None, Got: {result})")
                 else:
@@ -141,8 +154,9 @@ def run_notscheme_test(
             print(f"PASS: Caught expected error: {e}")
         else:
             print(f"FAIL: Unexpected error: {e}")
-            # import traceback
-            # traceback.print_exc()
+            import traceback  # Keep for debugging specific test failures
+
+            traceback.print_exc()
     print("-" * 20)
 
 
@@ -288,23 +302,73 @@ if __name__ == "__main__":
     run_notscheme_test(
         "List Operations Test",
         """
-        (static my_list (list 1 (+ 1 1) "three")) // my_list = (1 2 "three")
-        (print (first my_list))                     // Output: 1
-        (print (rest my_list))                      // Output: (2 "three")
-        (static my_list2 (cons 0 my_list))          // my_list2 = (0 1 2 "three")
-        (print my_list2)                            // Output: (0 1 2 "three")
-        (print (is_nil nil))                        // Output: true
-        (print (is_nil my_list2))                   // Output: false
-        (first (list "final"))                      // Final value on stack: "final"
+        (static my_list (list 1 (+ 1 1) "three")) 
+        (print (first my_list))                     
+        (print (rest my_list))                      
+        (static my_list2 (cons 0 my_list))          
+        (print my_list2)
+        (print (is_nil nil))                        
+        (print (is_nil my_list2))                   
+        (first (list "final"))                      
         """,
-        expected_value="final",  # (first (list "final")) should leave "final"
+        expected_value="final",
+        expected_prints=[1, [2, "three"], [0, 1, 2, "three"], True, False],
+    )
+
+    # --- New Quote Tests ---
+    run_notscheme_test(
+        "Quote: Simple Symbol",
+        "(print 'my_symbol)",
+        expected_value=None,  # print returns nil, then POPped by top-level form logic, then HALT
+        expected_prints=[QuotedSymbol(name="my_symbol")],
+    )
+
+    run_notscheme_test(
+        "Quote: Simple List",
+        "(print '(item1 10 true nil))",
+        expected_value=None,
+        expected_prints=[[QuotedSymbol(name="item1"), 10, True, None]],
+    )
+
+    run_notscheme_test(
+        "Quote: Nested Symbol (' 'another_symbol)",
+        "(print ''another_symbol)",  # Equivalent to (print (quote (quote another_symbol)))
+        expected_value=None,
         expected_prints=[
-            1,
-            [2, "three"],  # Note: VM represents lists as Python lists
-            [0, 1, 2, "three"],
-            True,
-            False,
+            [QuotedSymbol(name="quote"), QuotedSymbol(name="another_symbol")]
         ],
+    )
+
+    run_notscheme_test(
+        "Quote: List with Nested Quote ('(a 'b c))",
+        "(print '(a 'b c))",  # Equivalent to (print (quote (a (quote b) c)))
+        expected_value=None,
+        expected_prints=[
+            [
+                QuotedSymbol(name="a"),
+                [QuotedSymbol(name="quote"), QuotedSymbol(name="b")],
+                QuotedSymbol(name="c"),
+            ]
+        ],
+    )
+
+    run_notscheme_test(
+        "Quote: Empty List ('())",
+        "(print '())",
+        expected_value=None,
+        expected_prints=[[]],  # Empty list
+    )
+
+    run_notscheme_test(
+        "Quote: Evaluate Quoted List as Data",
+        """
+        (let my_quoted_list '(1 "two" true))
+        (first my_quoted_list) // Should be 1 if lists are just Python lists
+        """,
+        # If quoted lists are just Python lists, (first '(1 2)) works.
+        # If they were special "quoted list objects", 'first' might need to handle them.
+        # Our VM uses Python lists, so this should work.
+        expected_value=1,
     )
 
     print("\n--- All NotScheme end-to-end tests completed ---")
