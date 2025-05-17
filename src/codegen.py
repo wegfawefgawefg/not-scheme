@@ -26,8 +26,8 @@ from ast_nodes import (
     Expression,
     TopLevelForm,
 )
-from vm import OpCode, QuotedSymbol  # Import QuotedSymbol from vm
-from typing import List, Dict, Any, Tuple, Union, get_args
+from vm import OpCode, QuotedSymbol
+from typing import List, Dict, Any, Tuple, Union, get_args, Set, Optional
 
 EXPRESSION_NODE_TYPES = (
     NumberNode,
@@ -52,29 +52,20 @@ class CodeGenerationError(Exception):
 
 
 PRIMITIVE_OPERATIONS = {
-    # Arithmetic
     "+": (OpCode.ADD, None),
     "-": (OpCode.SUB, None),
     "*": (OpCode.MUL, None),
     "/": (OpCode.DIV, None),
-    # Comparison
     "=": (OpCode.EQ, None),
     ">": (OpCode.GT, None),
     "<": (OpCode.LT, None),
-    # Logical
     "not": (OpCode.NOT, None),
-    # I/O
-    "print": (OpCode.PRINT, -1),  # Arity -1 for special handling
-    # List Primitives
+    "print": (OpCode.PRINT, -1),
     "is_nil": (OpCode.IS_NIL, None),
     "cons": (OpCode.CONS, None),
     "first": (OpCode.FIRST, None),
     "rest": (OpCode.REST, None),
-    "list": (
-        OpCode.MAKE_LIST,
-        -1,
-    ),  # Arity -1 for special handling (MAKE_LIST takes arg_count)
-    # Type Predicates
+    "list": (OpCode.MAKE_LIST, -1),
     "is_boolean": (OpCode.IS_BOOLEAN, None),
     "is_number": (OpCode.IS_NUMBER, None),
     "is_string": (OpCode.IS_STRING, None),
@@ -85,16 +76,21 @@ PRIMITIVE_OPERATIONS = {
 
 
 class CodeGenerator:
-    def __init__(self):
+    def __init__(self, processed_modules_cache: Optional[Set[str]] = None):
         self.bytecode: List[Union[tuple, str]] = []
         self.label_count = 0
         self.global_env: Dict[str, Any] = {}
         self.struct_definitions: Dict[str, List[str]] = {}
         self.compile_time_env_chain: List[Dict[str, str]] = [{"type": "global"}]
+        self.processed_modules_for_defs: Set[str] = (
+            processed_modules_cache if processed_modules_cache is not None else set()
+        )
+        self.current_module_name_for_labels: str = "__main__"
+        self.discovered_dependencies: Set[str] = set()
 
     def _new_label(self, prefix="L") -> str:
         self.label_count += 1
-        return f"{prefix}{self.label_count}"
+        return f"{self.current_module_name_for_labels}_{prefix}{self.label_count}"
 
     def _emit(self, *args: Any):
         if len(args) == 1 and isinstance(args[0], str) and args[0].endswith(":"):
@@ -122,21 +118,29 @@ class CodeGenerator:
                 f"Warning: Could not add '{name}' to current compile-time local scope."
             )
 
-    def generate_program(self, program_node: ProgramNode) -> List[Union[tuple, str]]:
+    def generate_program(
+        self, program_node: ProgramNode, module_name: str = "__main__"
+    ) -> Tuple[List[Union[tuple, str]], Set[str]]:
         self.bytecode = []
-        self.global_env.clear()
-        self.struct_definitions.clear()
-        self.compile_time_env_chain = [{"type": "global"}]
-        for i, form in enumerate(program_node.forms):
+        self.discovered_dependencies = set()
+        self.current_module_name_for_labels = (
+            module_name.replace(".ns", "").replace("/", "_").replace("\\", "_")
+        )
+
+        use_forms = [form for form in program_node.forms if isinstance(form, UseNode)]
+        for form in use_forms:
+            self._generate_use_node(form)
+
+        other_forms = [
+            form for form in program_node.forms if not isinstance(form, UseNode)
+        ]
+        for i, form in enumerate(other_forms):
+            is_last_exec_form = i == len(other_forms) - 1
             self._generate_top_level_form(
-                form, is_last_form_in_program=(i == len(program_node.forms) - 1)
+                form, is_last_form_in_program=is_last_exec_form
             )
-        if not self.bytecode or not (
-            isinstance(self.bytecode[-1], tuple)
-            and self.bytecode[-1][0] in (OpCode.HALT, OpCode.RETURN, OpCode.JUMP)
-        ):
-            self._emit(OpCode.HALT)
-        return self.bytecode
+
+        return self.bytecode, self.discovered_dependencies
 
     def _generate_top_level_form(
         self, form: TopLevelForm, is_last_form_in_program: bool = False
@@ -148,8 +152,6 @@ class CodeGenerator:
             self._generate_fn_node(form)
         elif isinstance(form, StructDefNode):
             self._generate_struct_def_node(form)
-        elif isinstance(form, UseNode):
-            self._generate_use_node(form)
         elif isinstance(form, EXPRESSION_NODE_TYPES):
             self._generate_expression(form)
             if not is_last_form_in_program and len(self.bytecode) > start_len:
@@ -225,7 +227,10 @@ class CodeGenerator:
     def _generate_static_node(self, node: StaticNode):
         self._generate_expression(node.value)
         self._emit(OpCode.STORE, node.name.name)
-        self.global_env[node.name.name] = "static_variable"
+        self.global_env[node.name.name] = {
+            "type": "static_variable",
+            "value_type": type(node.value).__name__,
+        }
 
     def _generate_fn_or_lambda_body(
         self,
@@ -234,9 +239,8 @@ class CodeGenerator:
         body: List[Expression],
         is_named_fn: bool,
     ):
-        entry_label = self._new_label(
-            f"{'fn' if is_named_fn else 'lambda'}_{name_for_label}"
-        )
+        label_prefix = f"{self.current_module_name_for_labels}_{'fn' if is_named_fn else 'lambda'}_{name_for_label}"
+        entry_label = self._new_label(label_prefix)
         if is_named_fn:
             self._emit(OpCode.MAKE_CLOSURE, entry_label)
             self._emit(OpCode.STORE, name_for_label)
@@ -247,9 +251,7 @@ class CodeGenerator:
             }
         else:
             self._emit(OpCode.MAKE_CLOSURE, entry_label)
-        end_body_label = self._new_label(
-            f"end_{'fn' if is_named_fn else 'lambda'}_{name_for_label}"
-        )
+        end_body_label = self._new_label(f"end_{label_prefix}")
         self._emit(OpCode.JUMP, end_body_label)
         self._emit(entry_label + ":")
         self._enter_scope()
@@ -280,7 +282,10 @@ class CodeGenerator:
     def _generate_struct_def_node(self, node: StructDefNode):
         field_names = [field.name for field in node.fields]
         if node.name.name in self.struct_definitions:
-            raise CodeGenerationError(f"Struct '{node.name.name}' already defined.")
+            if self.struct_definitions[node.name.name] != field_names:
+                raise CodeGenerationError(
+                    f"Struct '{node.name.name}' already defined with different fields."
+                )
         self.struct_definitions[node.name.name] = field_names
         self.global_env[node.name.name] = {"type": "struct_type", "fields": field_names}
 
@@ -289,7 +294,6 @@ class CodeGenerator:
             op_name = node.callable_expr.name
             if op_name in PRIMITIVE_OPERATIONS:
                 opcode, arity_info = PRIMITIVE_OPERATIONS[op_name]
-
                 if op_name == "print":
                     if not node.arguments:
                         self._emit(OpCode.PUSH, "")
@@ -300,16 +304,13 @@ class CodeGenerator:
                             self._emit(OpCode.PRINT)
                     self._emit(OpCode.PUSH, None)
                     return
-
                 elif op_name == "list":
                     for arg_expr in node.arguments:
                         self._generate_expression(arg_expr)
                     self._emit(OpCode.MAKE_LIST, len(node.arguments))
                     return
-
-                if arity_info is None:  # Standard primitives that pop their own args
+                if arity_info is None:
                     expected_arity = 0
-                    # Determine expected arity for validation
                     if op_name in ["+", "-", "*", "/", "=", ">", "<", "cons"]:
                         expected_arity = 2
                     elif op_name in [
@@ -325,22 +326,19 @@ class CodeGenerator:
                         "is_function",
                     ]:
                         expected_arity = 1
-
                     if len(node.arguments) != expected_arity:
                         raise CodeGenerationError(
-                            f"Primitive '{op_name}' expects {expected_arity} argument(s), got {len(node.arguments)}"
+                            f"Primitive '{op_name}' expects {expected_arity} args, got {len(node.arguments)}"
                         )
-
-                    if op_name == "cons":  # Special argument order for cons
-                        self._generate_expression(node.arguments[1])  # list_expr
-                        self._generate_expression(node.arguments[0])  # item_expr
-                    else:  # Default: push arguments left-to-right
+                    if op_name == "cons":
+                        self._generate_expression(node.arguments[1])
+                        self._generate_expression(node.arguments[0])
+                    else:
                         for arg_expr in node.arguments:
                             self._generate_expression(arg_expr)
                     self._emit(opcode)
                     return
-
-            elif op_name in self.struct_definitions:  # Struct instantiation
+            elif op_name in self.struct_definitions:
                 struct_name, field_names = op_name, self.struct_definitions[op_name]
                 if len(node.arguments) != len(field_names):
                     raise CodeGenerationError(
@@ -350,8 +348,21 @@ class CodeGenerator:
                     self._generate_expression(arg_expr)
                 self._emit(OpCode.MAKE_STRUCT, struct_name, tuple(field_names))
                 return
-
-        # Generic call logic (user-defined functions, lambdas, or symbols not caught above)
+            elif (
+                op_name in self.global_env
+                and isinstance(self.global_env[op_name], dict)
+                and self.global_env[op_name].get("type") == "struct_type"
+            ):
+                struct_info = self.global_env[op_name]
+                struct_name, field_names = op_name, struct_info["fields"]
+                if len(node.arguments) != len(field_names):
+                    raise CodeGenerationError(
+                        f"Imported struct '{struct_name}': expected {len(field_names)} args, got {len(node.arguments)}."
+                    )
+                for arg_expr in node.arguments:
+                    self._generate_expression(arg_expr)
+                self._emit(OpCode.MAKE_STRUCT, struct_name, tuple(field_names))
+                return
         for arg_expr in node.arguments:
             self._generate_expression(arg_expr)
         self._generate_expression(node.callable_expr)
@@ -417,96 +428,150 @@ class CodeGenerator:
                 self._emit(OpCode.POP)
 
     def _generate_use_node(self, node: UseNode):
-        print(f"Warning: 'use' for '{node.module_name.name}' not implemented.")
-        pass
+        module_name_to_load = node.module_name.name
+        self.discovered_dependencies.add(module_name_to_load)
+
+        if module_name_to_load in self.processed_modules_for_defs:
+            return
+        self.processed_modules_for_defs.add(module_name_to_load)
+
+        try:
+            module_file_path = f"{module_name_to_load}.ns"
+            with open(module_file_path, "r") as f:
+                source_code = f.read()
+        except FileNotFoundError:
+            raise CodeGenerationError(f"Module file not found: {module_file_path}")
+        except Exception as e:
+            raise CodeGenerationError(
+                f"Error reading module file {module_file_path}: {e}"
+            )
+
+        from lexer import tokenize as dep_tokenize, LexerError as DepLexerError
+        from parser import Parser as DepParser, ParserError as DepParserError
+
+        try:
+            dep_tokens = dep_tokenize(source_code)
+            dep_parser = DepParser(dep_tokens)
+            dep_ast = dep_parser.parse_program()
+        except (DepLexerError, DepParserError) as e:
+            raise CodeGenerationError(
+                f"Error compiling used module '{module_name_to_load}' for definitions: {e}"
+            )
+
+        temp_dep_codegen = CodeGenerator(
+            processed_modules_cache=self.processed_modules_for_defs
+        )
+        _, further_deps = temp_dep_codegen.generate_program(
+            dep_ast, module_name=module_name_to_load
+        )
+        for dep in further_deps:
+            self.discovered_dependencies.add(dep)
+
+        items_to_import_names: List[str] = []
+        import_all = isinstance(node.items, SymbolNode) and node.items.name == "*"
+
+        if import_all:
+            items_to_import_names.extend(temp_dep_codegen.global_env.keys())
+            items_to_import_names.extend(temp_dep_codegen.struct_definitions.keys())
+            items_to_import_names = list(set(items_to_import_names))
+        elif isinstance(node.items, list):
+            items_to_import_names = [item.name for item in node.items]
+
+        for item_name in items_to_import_names:
+            imported_something = False
+            if item_name in temp_dep_codegen.global_env:
+                self.global_env[item_name] = temp_dep_codegen.global_env[item_name]
+                imported_something = True
+            if item_name in temp_dep_codegen.struct_definitions:
+                self.struct_definitions[item_name] = (
+                    temp_dep_codegen.struct_definitions[item_name]
+                )
+                if item_name not in self.global_env:
+                    self.global_env[item_name] = {
+                        "type": "struct_type",
+                        "fields": temp_dep_codegen.struct_definitions[item_name],
+                    }
+                imported_something = True
+            if not imported_something and not import_all:
+                print(
+                    f"Warning: Item '{item_name}' in '(use {module_name_to_load} ...)' not found in module '{module_name_to_load}'."
+                )
 
 
 if __name__ == "__main__":
     from lexer import tokenize, LexerError
     from parser import Parser, ParserError
 
-    print("--- NotScheme Code Generator ---")
+    with open("math_utils.ns", "w") as f:
+        f.write("(struct Vec2 (x y))\n")
+        f.write("(static gravity 9.8)\n")
+        f.write("(fn square (val) (* val val))\n")
+        f.write(
+            "(fn add_vec (v1 v2) (Vec2 (+ (get v1 x) (get v2 x)) (+ (get v1 y) (get v2 y))))\n"
+        )
+    with open("string_ext.ns", "w") as f:
+        f.write('(static greeting "Hello from string_ext module")\n')
+        # Note: string_append is not in PRIMITIVE_OPERATIONS, so (combine_strings ...) will try to LOAD 'string_append'
+        # This is fine for testing the 'use' mechanism itself, but will fail at runtime if string_append isn't defined.
+        f.write("(fn combine_strings (s1 s2) (string_append s1 s2))\n")
 
+    print("--- NotScheme Code Generator (Focus on 'use') ---")
+
+    test_code_use_specific = """
+    (use math_utils (gravity square Vec2 add_vec)) 
+    (static my_g gravity)
+    (static nine (square 3))
+    (static v1 (Vec2 1 2))
+    (static v2 (Vec2 3 4))
+    (static v_sum (add_vec v1 v2)) 
+    """
+    test_code_use_all = """
+    (use string_ext *)
+    (print greeting)
+    (print (combine_strings "Not" "Scheme"))
+    """
     tests = {
-        "Static Vars": """(static a 10) (static b (+ 5 5))""",
-        "Function Def & Call": """(fn add (x y) (+ x y)) (static result (add 10 20))""",
-        "Struct Def & Instance": """(struct Point (x_coord y_coord)) (static p1 (Point 1 2))""",
-        "If Expression": """(static x 10) (static if_result (if (> x 5) 100 200))""",
-        "Let Expression": """
-            (fn test_let ()
-                (let ((a 10) (b (+ a 5))) 
-                    (+ a b)))
-            (test_let) 
-        """,
-        "Lambda Expression": """
-            (static my_adder ((lambda (val_to_add) (lambda (x) (+ x val_to_add))) 5))
-            (my_adder 10) 
-        """,
-        "Get/Set Struct Fields (in Fn)": """
-            (struct Pair (first second)) 
-            (fn test_get_set ()
-              (let p (Pair 10 20))
-              (set p second 30) 
-              (get p second)    
-            )
-            (test_get_set)
-        """,
-        "While Loop (Corrected Set)": """
-            (struct Counter (value current_sum))
-            (fn test_while ()
-              (let c (Counter 0 0))
-              (while (< (get c value) 3)
-                (set c current_sum (+ (get c current_sum) (get c value)))
-                (set c value (+ (get c value) 1))
-              )
-              (get c current_sum) 
-            )
-            (test_while)
-        """,
-        "Begin Expression": """
-            (begin 
-                (let temp 5) 
-                (+ temp 10)) 
-        """,
-        "List Operations": """
-            (static my_list (list 1 (+ 1 1) "three")) 
-            (print (first my_list))                     
-            (print (rest my_list))                      
-            (static my_list2 (cons 0 my_list))          
-            (print my_list2)
-            (print (is_nil nil))                        
-            (print (is_nil my_list2))                   
-        """,
-        "Type Predicates": """
-            (print (is_number 10))
-            (print (is_string "hi"))
-            (print (is_boolean true))
-            (print (is_list (list 1 2)))
-            (print (is_list nil))
-            (struct S (f))
-            (print (is_struct (S 1)))
-            (print (is_function (lambda () 1)))
-            (print (is_number "no"))
-        """,
+        "Use Specific Items": test_code_use_specific,
+        "Use All Items (*)": test_code_use_all,
     }
 
     for name, code in tests.items():
         print(f"\n--- Generating code for: {name} ---")
-        # print(code)
+        print(f"Source:\n{code}")
         try:
             tokens = tokenize(code)
             parser = Parser(tokens)
             ast = parser.parse_program()
 
-            codegen = CodeGenerator()
-            bytecode = codegen.generate_program(ast)
+            codegen = CodeGenerator(processed_modules_cache=set())
+            bytecode, deps = codegen.generate_program(
+                ast, module_name=name.replace(" ", "_")
+            )
 
             print("\nGenerated Bytecode:")
             for i, instruction in enumerate(bytecode):
                 print(f"{i:03d}: {instruction}")
+            print(f"\nDiscovered dependencies: {deps}")
+            print("\nCodegen Global Env (after this module's compilation):")
+            for k, v_info in codegen.global_env.items():
+                print(f"  {k}: {v_info}")
+            print("Codegen Struct Definitions (after this module's compilation):")
+            for k, v in codegen.struct_definitions.items():
+                print(f"  {k}: {v}")
+            print(
+                f"Processed modules for defs cache (final): {codegen.processed_modules_for_defs}"
+            )
 
         except (LexerError, ParserError, CodeGenerationError) as e:
             print(f"Error for '{name}': {e}")
             import traceback
 
             traceback.print_exc()
+
+    import os
+
+    try:
+        os.remove("math_utils.ns")
+        os.remove("string_ext.ns")
+    except OSError:
+        pass

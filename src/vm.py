@@ -51,10 +51,10 @@ class OpCode(Enum):
     SET_FIELD = 57
 
     # VM Control
-    HALT = 60  # Kept original number for consistency
+    HALT = 60
     PRINT = 61
 
-    # List Primitives (Moved HALT/PRINT up for grouping)
+    # List Primitives
     IS_NIL = 70
     CONS = 71
     FIRST = 72
@@ -65,9 +65,10 @@ class OpCode(Enum):
     IS_BOOLEAN = 80
     IS_NUMBER = 81
     IS_STRING = 82
-    IS_LIST = 83  # Checks for Python list type
-    IS_STRUCT = 84  # Checks for dict and __type__ key
-    IS_FUNCTION = 85  # Checks for Closure instance
+    IS_LIST = 83
+    IS_STRUCT = 84
+    IS_FUNCTION = 85
+    # LENGTH, APPEND_LIST, STRING_APPEND, NTH_ELEMENT are removed
 
 
 # --- Virtual Machine Class ---
@@ -230,7 +231,7 @@ class VirtualMachine:
                         raise TypeError(f"CALL expects Closure, got {type(callee)}")
                     # Args are already on stack below the callee, accessible by callee's STOREs
                     self.call_stack.append((self.ip, self.env_chain))
-                    self.env_chain = callee.defining_env + [{}]  # New local scope
+                    self.env_chain = callee.defining_env + [{}]
                     self.ip = self._get_instruction_index(callee.code_label)
                 elif opcode == OpCode.RETURN:
                     if not self.call_stack:
@@ -249,7 +250,7 @@ class VirtualMachine:
                     struct_instance = {"__type__": struct_name_str}
                     field_values = [
                         self.operand_stack.pop() for _ in range(field_count)
-                    ][::-1]  # Pop and reverse
+                    ][::-1]
                     for i, name in enumerate(field_names_tuple):
                         struct_instance[name] = field_values[i]
                     self.operand_stack.append(struct_instance)
@@ -351,9 +352,7 @@ class VirtualMachine:
                     if not self.operand_stack:
                         raise IndexError("IS_LIST requires one operand")
                     val = self.operand_stack.pop()
-                    self.operand_stack.append(
-                        isinstance(val, list) or val is None
-                    )  # nil is an empty list conceptually
+                    self.operand_stack.append(isinstance(val, list) or val is None)
                 elif opcode == OpCode.IS_STRUCT:
                     if not self.operand_stack:
                         raise IndexError("IS_STRUCT requires one operand")
@@ -406,38 +405,6 @@ class VirtualMachine:
 if __name__ == "__main__":
     print("Virtual Machine definition loaded.")
     print("To run tests, please execute 'vm_tests.py'.")
-
-    print("\n--- VM Type Predicate Test ---")
-    type_predicate_test_code = [
-        (OpCode.PUSH, 10),
-        (OpCode.IS_NUMBER,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, "hello"),
-        (OpCode.IS_STRING,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, True),
-        (OpCode.IS_BOOLEAN,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, None),
-        (OpCode.IS_LIST,),
-        (OpCode.PRINT,),  # True (nil is a list)
-        (OpCode.PUSH, []),
-        (OpCode.IS_LIST,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, [1, 2]),
-        (OpCode.IS_LIST,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, {"__type__": "S"}),
-        (OpCode.IS_STRUCT,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, Closure("L1", [])),
-        (OpCode.IS_FUNCTION,),
-        (OpCode.PRINT,),  # True
-        (OpCode.PUSH, 10),
-        (OpCode.IS_STRING,),
-        (OpCode.PRINT,),  # False
-        (OpCode.HALT,),
-    ]
-    vm_tp_test = VirtualMachine(type_predicate_test_code)
-    vm_tp_test.run()
-    print("-----------------------------")
+    # Minimal test to ensure it runs
+    test_code = [(OpCode.PUSH, 1), (OpCode.PRINT,), (OpCode.HALT,)]
+    VirtualMachine(test_code).run()
