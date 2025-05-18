@@ -1,5 +1,6 @@
 # run_notscheme.py
 # End-to-end pipeline for lexing, parsing, compiling, and running NotScheme code.
+# Can be used as a CLI to run .ns files or to run internal tests.
 
 from lexer import tokenize, LexerError
 from parser import Parser, ParserError
@@ -20,44 +21,36 @@ class NotSchemeError(Exception):
 
 
 # Global caches for the compilation process
-# Stores the *own* bytecode for each module once compiled.
 module_own_bytecode_cache: Dict[str, List[Any]] = {}
-# Stores the ordered list of all unique module names encountered in a compilation run,
-# in an order that should be suitable for concatenation (dependencies first).
 ordered_modules_for_linking: List[str] = []
-# Cache for CodeGenerator instances to know which modules' *definitions*
-# have already been extracted to avoid re-parsing files for symbol resolution.
 shared_definitions_cache_for_codegen: Set[str] = set()
-# Stack to detect circular dependencies during the module compilation process.
 compilation_in_progress_stack: List[str] = []
 
 
 def compile_all_modules_recursively(
     module_name: str,
-    base_path: str,  # Base path to resolve this module_name.ns
+    base_path: str,
+    main_module_name_for_halt_logic: str,  # To know which module's HALT to keep
+    # This cache is for CodeGenerator instances to know which modules' *definitions*
+    # have already been extracted during the current overall compilation run.
+    _shared_definitions_cache: Set[str],  # Renamed to avoid conflict with global
 ):
     """
     Recursively ensures a module and all its dependencies are compiled.
     Populates `module_own_bytecode_cache` and `ordered_modules_for_linking`.
-    Does not return bytecode directly; results are stored in global caches.
     """
     # print(f"Ensuring module compiled: {module_name} from base: {base_path}")
 
-    if (
-        module_name in module_own_bytecode_cache
-    ):  # Already compiled and its deps processed
-        # print(f"Module {module_name} already in bytecode cache. Skipping.")
+    if module_name in module_own_bytecode_cache:
         return
 
     if module_name in compilation_in_progress_stack:
-        # print(f"Circular dependency detected for {module_name}. Breaking recursion for this path.")
         return
 
     compilation_in_progress_stack.append(module_name)
 
     module_file_to_open = os.path.join(base_path, f"{module_name}.ns")
     try:
-        # print(f"Reading source for {module_name} from {module_file_to_open}")
         with open(module_file_to_open, "r") as f:
             source_code = f.read()
     except FileNotFoundError:
@@ -75,25 +68,20 @@ def compile_all_modules_recursively(
         parser = Parser(tokens)
         ast = parser.parse_program()
 
-        # The shared_definitions_cache helps CodeGenerator's 'use' processing
-        # avoid re-parsing files just for definition extraction.
-        codegen = CodeGenerator(
-            processed_modules_cache=shared_definitions_cache_for_codegen
-        )
-
-        # generate_program returns the module's *own* bytecode and its direct dependencies
+        codegen = CodeGenerator(processed_modules_cache=_shared_definitions_cache)
         own_bytecode, direct_dependencies = codegen.generate_program(
             ast, module_name=module_name
         )
 
-        # Recursively compile dependencies first
         for dep_name in direct_dependencies:
-            # For now, assume dependencies are found relative to the current module's path
-            compile_all_modules_recursively(dep_name, base_path)
+            compile_all_modules_recursively(
+                dep_name,
+                base_path,
+                main_module_name_for_halt_logic,
+                _shared_definitions_cache,
+            )
 
-        # After all dependencies are processed (and thus in ordered_modules_for_linking),
-        # add the current module.
-        if module_name not in module_own_bytecode_cache:  # Should be true here
+        if module_name not in module_own_bytecode_cache:
             module_own_bytecode_cache[module_name] = own_bytecode
             if module_name not in ordered_modules_for_linking:
                 ordered_modules_for_linking.append(module_name)
@@ -108,9 +96,7 @@ def compile_all_modules_recursively(
     finally:
         os.chdir(original_cwd)
 
-    if (
-        module_name in compilation_in_progress_stack
-    ):  # Should be true unless error before pop
+    if module_name in compilation_in_progress_stack:
         compilation_in_progress_stack.pop()
 
 
@@ -127,31 +113,35 @@ def compile_program_with_dependencies(main_file_path: str) -> List[Any]:
     # Clear global caches for a fresh compilation run
     module_own_bytecode_cache.clear()
     ordered_modules_for_linking.clear()
-    shared_definitions_cache_for_codegen.clear()
+    shared_definitions_cache_for_codegen.clear()  # This is the one passed to CodeGenerator
     compilation_in_progress_stack.clear()
 
-    compile_all_modules_recursively(main_module_name, entry_base_path)
+    compile_all_modules_recursively(
+        main_module_name,
+        entry_base_path,
+        main_module_name,
+        shared_definitions_cache_for_codegen,
+    )
 
     final_bytecode: List[Any] = []
-    # print(f"Final compilation order for bytecode aggregation: {ordered_modules_for_linking}")
 
+    # The `ordered_modules_for_linking` should ideally be topologically sorted
+    # or at least have dependencies before the modules that use them.
+    # The current recursive approach aims for this by adding to `ordered_modules_for_linking`
+    # *after* its dependencies have been processed.
     for module_name in ordered_modules_for_linking:
         if module_name in module_own_bytecode_cache:
             module_bc = module_own_bytecode_cache[module_name]
-            # Remove HALT from dependency modules, only the main program's stream should end with one explicit HALT.
             if (
                 module_name != main_module_name
                 and module_bc
                 and isinstance(module_bc[-1], tuple)
                 and module_bc[-1] == (OpCode.HALT,)
             ):
-                # print(f"Appending bytecode for {module_name} (without its HALT)")
                 final_bytecode.extend(module_bc[:-1])
             else:
-                # print(f"Appending bytecode for {module_name}")
                 final_bytecode.extend(module_bc)
         else:
-            # This should ideally not happen if logic is correct
             print(
                 f"Warning: Module {module_name} was in ordered_modules_for_linking but not in module_own_bytecode_cache."
             )
@@ -216,9 +206,9 @@ def run_notscheme_test(
         f.write(source_code)
     created_files.append(full_entry_point_path)
 
-    # print(f"Main file for test: {full_entry_point_path}")
-    # print("Source (for main file):\n" + "-" * 10 + f"\n{source_code}\n" + "-" * 10)
-    # if aux_files:
+    # print(f"Main file for test: {full_entry_point_path}") # Optional debug
+    # print("Source (for main file):\n" + "-" * 10 + f"\n{source_code}\n" + "-" * 10) # Optional debug
+    # if aux_files: # Optional debug
     #     for fname, fcontent in aux_files.items():
     #         print(f"Auxiliary file: {fname}\n" + "-"*10 + f"\n{fcontent}\n" + "-"*10)
 
@@ -226,19 +216,17 @@ def run_notscheme_test(
     try:
         final_bytecode = compile_program_with_dependencies(full_entry_point_path)
 
-        print("Final Aggregated Bytecode:")
-        for i, instruction in enumerate(final_bytecode):
-            print(f"  {i:03d}: {instruction}")
+        # print("Final Aggregated Bytecode:") # Optional debug
+        # for i, instruction in enumerate(final_bytecode):
+        #     print(f"  {i:03d}: {instruction}")
 
         if expected_prints is not None:
             result, actual_prints_text = execute_bytecode(
                 final_bytecode, capture_prints=True
             )
-            print("Captured Output:")
-            if actual_prints_text:
-                print(actual_prints_text, end="")
-            else:
-                print("<no output>")
+            # print("Captured Output:") # Optional debug
+            # if actual_prints_text: print(actual_prints_text, end="")
+            # else: print("<no output>")
         else:
             result = execute_bytecode(final_bytecode)
 
@@ -304,8 +292,11 @@ def run_notscheme_test(
                 except OSError as e_os:
                     print(f"Warning: could not remove test file {fname}: {e_os}")
         if aux_files:
-            for fname in aux_files.keys():
-                aux_dir = os.path.dirname(os.path.join(test_base_path, fname))
+            for fname_key in (
+                aux_files.keys()
+            ):  # Iterate over keys to construct paths as they were made
+                aux_path = os.path.join(test_base_path, fname_key)
+                aux_dir = os.path.dirname(aux_path)
                 if (
                     aux_dir
                     and aux_dir != test_base_path
@@ -330,7 +321,7 @@ def run_notscheme_test(
     print("-" * 20)
 
 
-if __name__ == "__main__":
+def run_tests():
     # --- Single File Tests ---
     run_notscheme_test(
         "Static Vars", "(static a 10)(static b (+ a 5)) b", expected_value=15
@@ -445,9 +436,9 @@ if __name__ == "__main__":
     """
     main_circular_content = """
     // main_circular.ns
-    (use module_a (call_b_from_a get_a)) // get_a is not used, but tests import
-    (use module_b (get_b_direct))     // get_b_direct is not used, but tests import
-    (call_b_from_a)                   // This is the actual call we test the result of
+    (use module_a (call_b_from_a get_a)) 
+    (use module_b (get_b_direct))     
+    (call_b_from_a)                   
     """
     run_notscheme_test(
         "Module: Circular Use for Definitions",
@@ -456,5 +447,36 @@ if __name__ == "__main__":
         aux_files={"module_a.ns": module_a_content, "module_b.ns": module_b_content},
         expected_value=30,
     )
-
     print("\n--- All NotScheme end-to-end tests completed ---")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        main_file_to_run = sys.argv[1]
+        if not main_file_to_run.endswith(".ns"):
+            print(f"Error: File to run must be a .ns file. Got: {main_file_to_run}")
+            sys.exit(1)
+        if not os.path.exists(main_file_to_run):
+            print(f"Error: File not found: {main_file_to_run}")
+            sys.exit(1)
+
+        print(f"Running NotScheme program: {main_file_to_run}")
+        try:
+            final_bytecode = compile_program_with_dependencies(main_file_to_run)
+            # print("\n--- Final Bytecode for CLI Run ---")
+            # for i, instruction in enumerate(final_bytecode):
+            #     print(f"  {i:03d}: {instruction}")
+            # print("------------------------------------")
+
+            # Execute without capturing prints, let them go to stdout directly
+            execute_bytecode(final_bytecode, capture_prints=False)
+            # The VM's HALT will print "Execution halted."
+            # We might not want to print the final stack value for CLI runs unless specified.
+        except (NotSchemeError, Exception) as e:
+            print(f"Error during execution: {e}", file=sys.stderr)
+            # import traceback
+            # traceback.print_exc() # For more detailed debug if needed
+            sys.exit(1)
+    else:
+        print("No file provided to run. Running internal tests...")
+        run_tests()
