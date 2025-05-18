@@ -12,6 +12,8 @@ So, what's next? We have a solid foundation. Here are a few directions we could 
         Many of these will require direct VM opcodes and corresponding handlers in codegen.py (similar to how we handled +, print, etc.). For example, (list 1 2) would need to push 1, push 2, then an opcode like MAKE_LIST 2.
         This would make the language much more practical for writing list-processing functions.
 
+        However at the moment it isnt a priority to have a built out standard library. Library code can be implemented in ns itself and supplement all these features. 
+
     Full use Statement Implementation (Module Loading):
         Currently, _generate_use_node is a placeholder.
         Implementing this fully involves the compiler driver (run_notscheme.py or a new script) being able to:
