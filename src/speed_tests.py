@@ -164,28 +164,7 @@ def run_performance_test(
 
 
 if __name__ == "__main__":
-    print("Running Performance Comparison...")
-
-    fib_n_value = 20
-    run_performance_test(
-        "Recursive Fibonacci",
-        notscheme_fib_code_template.format(N=fib_n_value),
-        py_fib,
-        fib_n_value,
-        notscheme_main_file_name=f"fib_test_{fib_n_value}.ns",
-    )
-
-    # Reduced sum_n_value to avoid Python's default recursion limit
-    sum_n_value = 900
-    run_performance_test(
-        "Recursive Summation",
-        notscheme_sum_recursive_code_template.format(N=sum_n_value),
-        py_sum_up_to_recursive,
-        sum_n_value,
-        notscheme_main_file_name=f"sum_recursive_test_{sum_n_value}.ns",
-    )
-
-    print("\n--- Performance comparison finished. ---")
+    run_all_speed_tests()
 
 def run_all_speed_tests():
     """Runs all speed/performance comparison tests."""

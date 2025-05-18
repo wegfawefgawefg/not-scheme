@@ -312,15 +312,7 @@ def test_struct_operations():
 
 
 if __name__ == "__main__":
-    test_arithmetic()
-    test_conditional()
-    test_function_call_closure()  # This test's bytecode was corrected
-    test_recursion_closure()
-    test_scope_closure()
-    test_true_closure_make_adder()
-    test_struct_operations()
-
-    print("\n--- All VM tests completed. ---")
+    run_all_vm_tests()
 
 def run_all_vm_tests():
     """Runs all VM tests."""
