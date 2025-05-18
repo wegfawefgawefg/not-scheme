@@ -1,9 +1,10 @@
 # Contains end-to-end language feature tests for NotScheme.
 
 import os
+
 # import sys # sys will be imported in __main__ if needed
 # import io # io is not used
-import traceback # Moved import here
+import traceback  # Moved import here
 from typing import Any, Optional, List, Dict
 
 # Assuming vm.py and run_notscheme.py are in the parent directory (src)
@@ -34,7 +35,7 @@ def run_notscheme_test(
     # If test_language.py is run directly from src/, os.getcwd() will be src/.
     # For consistency, let's try to make aux files in a temp sub-directory if possible,
     # or ensure paths are handled robustly. For now, using current os.getcwd().
-    test_base_path = os.getcwd() 
+    test_base_path = os.getcwd()
 
     if aux_files:
         for fname, fcontent in aux_files.items():
@@ -55,7 +56,7 @@ def run_notscheme_test(
         else f"{test_name.lower().replace(' ', '_').replace(':', '_').replace('(', '_').replace(')', '_')}_main.ns"
     )
     full_entry_point_path = os.path.join(test_base_path, entry_point_filename_for_test)
-    
+
     entry_dir = os.path.dirname(full_entry_point_path)
     if entry_dir and not os.path.exists(entry_dir):
         os.makedirs(entry_dir)
@@ -63,7 +64,7 @@ def run_notscheme_test(
     with open(full_entry_point_path, "w") as f:
         f.write(source_code)
     created_files.append(full_entry_point_path)
-    
+
     actual_prints_text = ""
     try:
         # compile_program_with_dependencies expects the full path to the main file.
@@ -100,17 +101,17 @@ def run_notscheme_test(
                         formatted_expected_prints.append("Output: True")
                     elif p_val is False:
                         formatted_expected_prints.append("Output: False")
-                    elif p_val is None: # Python None for NotScheme's nil/none
+                    elif p_val is None:  # Python None for NotScheme's nil/none
                         formatted_expected_prints.append("Output: None")
                     else:
                         formatted_expected_prints.append(f"Output: {p_val}")
                 if actual_print_lines == formatted_expected_prints:
-                    print(f"Prints: PASS")
+                    print("Prints: PASS")
                 else:
-                    print(f"Prints: FAIL")
+                    print("Prints: FAIL")
                     print(f"  Expected: {formatted_expected_prints}")
                     print(f"  Actual  : {actual_print_lines}")
-            
+
             # Check result if expected_value is provided OR if there are no expected_prints (implies result matters)
             if expected_value is not None or not expected_prints:
                 if result == expected_value:
@@ -119,8 +120,12 @@ def run_notscheme_test(
                     print(f"Result: FAIL (Expected: {expected_value}, Got: {result})")
             # If only prints are expected, and expected_value is implicitly None (not provided)
             elif expected_prints and expected_value is None:
-                if result is None: # After HALT, VM returns None if stack empty, or last value
-                    print(f"Result: PASS (Expected implicit None after prints/HALT, Got: {result})")
+                if (
+                    result is None
+                ):  # After HALT, VM returns None if stack empty, or last value
+                    print(
+                        f"Result: PASS (Expected implicit None after prints/HALT, Got: {result})"
+                    )
                 else:
                     print(
                         f"Result: UNEXPECTED (Expected implicit None after prints/HALT, Got: {result})"
@@ -137,8 +142,10 @@ def run_notscheme_test(
                 try:
                     os.remove(fname_to_remove)
                 except OSError as e_os:
-                    print(f"Warning: could not remove test file {fname_to_remove}: {e_os}")
-        
+                    print(
+                        f"Warning: could not remove test file {fname_to_remove}: {e_os}"
+                    )
+
         # Attempt to remove created directories if they are empty
         # This needs to be done carefully, from child to parent, or by tracking created dirs
         # For simplicity, let's try removing the entry_dir and aux_dirs if they were created and are now empty.
@@ -148,17 +155,26 @@ def run_notscheme_test(
             for fname_key in aux_files.keys():
                 aux_path = os.path.join(test_base_path, fname_key)
                 aux_dir = os.path.dirname(aux_path)
-                if aux_dir and aux_dir != test_base_path: # Only consider subdirectories
-                     aux_dirs_to_check.add(aux_dir)
-            
-            for adir in sorted(list(aux_dirs_to_check), reverse=True): # Process deeper dirs first
+                if (
+                    aux_dir and aux_dir != test_base_path
+                ):  # Only consider subdirectories
+                    aux_dirs_to_check.add(aux_dir)
+
+            for adir in sorted(
+                list(aux_dirs_to_check), reverse=True
+            ):  # Process deeper dirs first
                 if os.path.exists(adir) and not os.listdir(adir):
                     try:
                         os.rmdir(adir)
                     except OSError as e_os:
                         print(f"Warning: could not remove test aux dir {adir}: {e_os}")
 
-        if entry_dir and entry_dir != test_base_path and os.path.exists(entry_dir) and not os.listdir(entry_dir):
+        if (
+            entry_dir
+            and entry_dir != test_base_path
+            and os.path.exists(entry_dir)
+            and not os.listdir(entry_dir)
+        ):
             try:
                 os.rmdir(entry_dir)
             except OSError as e_os:
@@ -181,9 +197,9 @@ def run_language_feature_tests():
     )
     run_notscheme_test(
         "Print Test",
-        """(print "Hello")(print 123)(print true)(print nil)(+ 1 1)""", # Assuming nil is the keyword for None
-        expected_value=2, # Result of (+ 1 1)
-        expected_prints=["Hello", 123, True, None], # Python None for NotScheme's nil
+        """(print "Hello")(print 123)(print true)(print nil)(+ 1 1)""",  # Assuming nil is the keyword for None
+        expected_value=2,  # Result of (+ 1 1)
+        expected_prints=["Hello", 123, True, None],  # Python None for NotScheme's nil
     )
     run_notscheme_test(
         "List Operations Test",
@@ -203,13 +219,13 @@ def run_language_feature_tests():
     run_notscheme_test(
         "Quote: Simple Symbol",
         "(print 'my_symbol)",
-        expected_value=None, # print returns None, then HALT
+        expected_value=None,  # print returns None, then HALT
         expected_prints=[QuotedSymbol(name="my_symbol")],
     )
     run_notscheme_test(
         "Quote: Simple List",
         "(print '(item1 10 true nil))",
-        expected_value=None, # print returns None, then HALT
+        expected_value=None,  # print returns None, then HALT
         expected_prints=[[QuotedSymbol(name="item1"), 10, True, None]],
     )
 
@@ -243,8 +259,8 @@ def run_language_feature_tests():
     run_notscheme_test(
         "Module: Use Specific Items",
         source_code=main_specific_import_content,
-        main_file_name="main_specific.ns", # This will be created in current dir
-        aux_files={"math_utils.ns": math_utils_content}, # Also in current dir
+        main_file_name="main_specific.ns",  # This will be created in current dir
+        aux_files={"math_utils.ns": math_utils_content},  # Also in current dir
         expected_value=4,
     )
 
@@ -264,7 +280,7 @@ def run_language_feature_tests():
             "string_ext.ns": string_ext_content_safe,
             "math_utils.ns": math_utils_content,
         },
-        expected_value="Hello from string_ext module", # Result of (get_greeting)
+        expected_value="Hello from string_ext module",  # Result of (get_greeting)
         expected_prints=["Hello from string_ext module", 9],
     )
 
@@ -297,13 +313,15 @@ def run_language_feature_tests():
     )
     print("\n--- All NotScheme Language End-to-End Feature Tests Completed ---")
 
+
 if __name__ == "__main__":
     import sys
+
     # Add src directory to sys.path to allow imports of lexer, parser etc.
     # when running this test script directly.
     # Project root is two levels up from src/tests/
-    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    SRC_DIR = os.path.join(PROJECT_ROOT, "src")
     if SRC_DIR not in sys.path:
         sys.path.insert(0, SRC_DIR)
     run_language_feature_tests()

@@ -1,6 +1,7 @@
 # Contains test cases for the Lexer.
 
-from lexer import tokenize, LexerError, Token, TokenType
+from lexer import tokenize, LexerError
+
 
 def run_lexer_tests():
     """Runs all lexer tests."""
@@ -73,17 +74,19 @@ def run_lexer_tests():
             print(token)
     except LexerError as e:
         print(f"Lexer Error: {e}")
-    
+
     print("\n--- Lexer tests completed ---")
+
 
 if __name__ == "__main__":
     import sys
     import os
+
     # Add src directory to sys.path to allow imports of lexer, parser etc.
     # when running this test script directly.
     # Project root is two levels up from src/tests/
-    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    SRC_DIR = os.path.join(PROJECT_ROOT, "src")
     if SRC_DIR not in sys.path:
         sys.path.insert(0, SRC_DIR)
     run_lexer_tests()
