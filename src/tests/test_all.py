@@ -5,29 +5,18 @@ import sys
 import os
 import traceback # Moved import here as it's used in one place
 
-# Add the 'src' directory to sys.path
-# This allows modules in 'tests' to import from 'src' as if 'src' is a top-level package
-# Project root is two levels up from src/tests/
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
-
-# Now, sibling test files (e.g., test_lexer.py) can do `from lexer import ...`
-# And test_all.py itself can import test modules from the current 'tests' directory
+# Imports are now absolute, assuming the tests are run as modules from the project root.
 try:
-    from test_lexer import run_lexer_tests
-    from test_parser import run_parser_tests
-    from test_codegen import run_codegen_tests
-    from test_language import run_language_feature_tests
-    from test_vm import run_all_vm_tests
-    from test_speed import run_all_speed_tests
+    from src.tests.test_lexer import run_lexer_tests
+    from src.tests.test_parser import run_parser_tests
+    from src.tests.test_codegen import run_codegen_tests
+    from src.tests.test_language import run_language_feature_tests
+    from src.tests.test_vm import run_all_vm_tests
+    from src.tests.test_speed import run_all_speed_tests
 except ImportError as e:
     print(f"Error importing test modules: {e}")
-    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
-    print(f"SRC_DIR: {SRC_DIR}")
     print(f"sys.path: {sys.path}")
-    print("Please ensure all test_*.py files are in the tests/ directory and component modules (lexer, parser, etc.) are in the src/ directory.")
+    print("Please ensure you are running tests from the project root (e.g., using 'python -m src.tests.test_all') and that all test_*.py files are in the src/tests/ directory and component modules (lexer, parser, etc.) are in the src/ directory.")
     sys.exit(1)
 
 def main():

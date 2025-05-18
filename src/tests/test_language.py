@@ -11,8 +11,8 @@ from typing import Any, Optional, List, Dict
 # or accessible via PYTHONPATH.
 # For direct execution from src/, this relative import works.
 # If run from root, Python path might need adjustment or use absolute imports.
-from vm import QuotedSymbol
-from run_notscheme import (
+from src.vm import QuotedSymbol
+from src.run_notscheme import (
     compile_program_with_dependencies,
     execute_bytecode,
     NotSchemeError,
@@ -315,13 +315,6 @@ def run_language_feature_tests():
 
 
 if __name__ == "__main__":
-    import sys
-
-    # Add src directory to sys.path to allow imports of lexer, parser etc.
-    # when running this test script directly.
-    # Project root is two levels up from src/tests/
-    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    SRC_DIR = os.path.join(PROJECT_ROOT, "src")
-    if SRC_DIR not in sys.path:
-        sys.path.insert(0, SRC_DIR)
+    # To run this file directly, ensure the project root is in PYTHONPATH
+    # or run as a module: python -m src.tests.test_language
     run_language_feature_tests()

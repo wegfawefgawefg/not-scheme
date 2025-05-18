@@ -2,11 +2,11 @@
 # End-to-end pipeline for lexing, parsing, compiling, and running NotScheme code.
 # Can be used as a CLI to run .ns files or to run internal tests.
 
-from lexer import tokenize, LexerError
-from parser import Parser, ParserError
-from ast_nodes import ProgramNode
-from codegen import CodeGenerator, CodeGenerationError
-from vm import VirtualMachine, OpCode # QuotedSymbol removed
+from src.lexer import tokenize, LexerError
+from src.parser import Parser, ParserError
+from src.ast_nodes import ProgramNode
+from src.codegen import CodeGenerator, CodeGenerationError
+from src.vm import VirtualMachine, OpCode # QuotedSymbol removed
 
 import io
 import sys

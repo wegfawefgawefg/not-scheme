@@ -5,18 +5,18 @@ import time
 import os
 import sys
 
-# Assuming run_notscheme.py is in the same directory or accessible in PYTHONPATH
+# Assuming run_notscheme.py is in the src directory or accessible in PYTHONPATH
 try:
-    from run_notscheme import (
+    from src.run_notscheme import (
         compile_program_with_dependencies,
         execute_bytecode,
         NotSchemeError,
     )
-    from vm import QuotedSymbol
+    from src.vm import QuotedSymbol
 except ImportError as e:
-    print(f"Error importing from run_notscheme.py or vm.py: {e}")
+    print(f"Error importing from src.run_notscheme or src.vm: {e}")
     print(
-        "Please ensure run_notscheme.py and vm.py are in the same directory or accessible via PYTHONPATH."
+        "Please ensure run_notscheme.py and vm.py are in the src/ directory or accessible via PYTHONPATH."
     )
     sys.exit(1)
 
@@ -187,10 +187,6 @@ def run_all_speed_tests():
     # The final "Performance comparison finished." print is now inside this function.
 
 if __name__ == "__main__":
-    # Add src directory to sys.path to allow imports from src
-    # when running this test script directly.
-    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
-    if SRC_DIR not in sys.path:
-        sys.path.insert(0, SRC_DIR)
+    # To run this file directly, ensure the project root is in PYTHONPATH
+    # or run as a module: python -m src.tests.test_speed
     run_all_speed_tests()
