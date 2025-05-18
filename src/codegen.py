@@ -27,12 +27,13 @@ from ast_nodes import (
     TopLevelForm,
 )
 from vm import OpCode, QuotedSymbol
-from typing import List, Dict, Any, Tuple, Union, get_args, Set, Optional
+from typing import List, Dict, Any, Tuple, Union, Set, Optional # Removed get_args
 
-EXPRESSION_NODE_TYPES = (
-    NumberNode,
-    StringNode,
-    BooleanNode,
+# EXPRESSION_NODE_TYPES was unused, replaced with inline tuple below
+# EXPRESSION_NODE_TYPES = (
+#     NumberNode,
+#     StringNode,
+#     BooleanNode,
     NilNode,
     SymbolNode,
     QuoteNode,
@@ -44,7 +45,7 @@ EXPRESSION_NODE_TYPES = (
     SetNode,
     WhileNode,
     BeginNode,
-)
+# )
 
 
 class CodeGenerationError(Exception):
@@ -152,7 +153,7 @@ class CodeGenerator:
             self._generate_fn_node(form)
         elif isinstance(form, StructDefNode):
             self._generate_struct_def_node(form)
-        elif isinstance(form, EXPRESSION_NODE_TYPES):
+        elif isinstance(form, (NumberNode, StringNode, BooleanNode, NilNode, SymbolNode, QuoteNode, CallNode, IfNode, LetNode, LambdaNode, GetNode, SetNode, WhileNode, BeginNode)):
             self._generate_expression(form)
             if not is_last_form_in_program and len(self.bytecode) > start_len:
                 last_instr = self.bytecode[-1]

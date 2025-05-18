@@ -11,7 +11,7 @@ from vm import VirtualMachine, OpCode # QuotedSymbol removed
 import io
 import sys
 import os
-from typing import Any, Optional, List, Dict, Set, Tuple
+from typing import Any, Optional, List, Dict, Set # Removed Tuple
 
 
 class NotSchemeError(Exception):
@@ -196,4 +196,4 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         print("No file provided to run. To run a NotScheme file, use: python src/run_notscheme.py <file.ns>")
-        print("To run all internal tests, use: python src/test_all.py")
+        print("To run all internal tests, use: python tests/test_all.py")

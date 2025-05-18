@@ -1,7 +1,7 @@
-import sys
 from enum import Enum
 import collections
-import copy
+# import sys # Unused
+# import copy # Unused
 
 # --- Closure Representation ---
 Closure = collections.namedtuple("Closure", ["code_label", "defining_env"])

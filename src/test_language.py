@@ -1,8 +1,9 @@
 # Contains end-to-end language feature tests for NotScheme.
 
-import io
 import os
-import sys
+# import sys # sys will be imported in __main__ if needed
+# import io # io is not used
+import traceback # Moved import here
 from typing import Any, Optional, List, Dict
 
 # Assuming vm.py and run_notscheme.py are in the parent directory (src)
@@ -129,7 +130,6 @@ def run_notscheme_test(
             print(f"PASS: Caught expected error: {e}")
         else:
             print(f"FAIL: Unexpected error: {e}")
-            import traceback
             traceback.print_exc()
     finally:
         for fname_to_remove in created_files:
@@ -298,4 +298,11 @@ def run_language_feature_tests():
     print("\n--- All NotScheme Language End-to-End Feature Tests Completed ---")
 
 if __name__ == "__main__":
+    import sys
+    # Add src directory to sys.path to allow imports of lexer, parser etc.
+    # when running this test script directly.
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
     run_language_feature_tests()

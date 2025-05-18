@@ -1,14 +1,52 @@
 # Contains test cases for the Parser.
 
 from lexer import tokenize, LexerError, TokenType, Token
-from parser import Parser, ParserError, print_ast
+from parser import Parser, ParserError # Removed print_ast from here
 from ast_nodes import (
     ProgramNode,
 )  # Import other AST nodes as needed by print_ast or specific tests
-import sys  # For print_ast if it uses sys
+# import sys # sys will be imported in __main__ if needed
 
 
-# Helper function to print AST (copied from parser.py)
+# Helper function to print AST (moved from parser.py)
+def print_ast(node, indent=0):
+    indent_str = "  " * indent
+    if isinstance(node, ProgramNode):
+        print(f"{indent_str}ProgramNode:")
+        for form in node.forms:
+            print_ast(form, indent + 1)
+    elif isinstance(node, list):
+        # Check if it's a list of AST nodes or a list of primitive quoted data
+        if node and hasattr(
+            node[0], "__dataclass_fields__"
+        ):  # Simple check if elements are dataclasses
+            print(f"{indent_str}[")
+            for item in node:
+                print_ast(item, indent + 1)
+            print(f"{indent_str}]")
+        else:  # Likely a list of primitive data from a quote
+            print(f"{indent_str}{node!r}")
+
+    elif hasattr(
+        node, "__dataclass_fields__"
+    ):  # Check if it's a dataclass (our AST nodes are)
+        print(f"{indent_str}{node.__class__.__name__}:")
+        for field_name in node.__dataclass_fields__:
+            field_value = getattr(node, field_name)
+            if (  # Check if list of AST nodes
+                isinstance(field_value, list)
+                and field_value
+                and hasattr(field_value[0], "__dataclass_fields__")
+            ):
+                print(f"{indent_str}  {field_name}:")
+                print_ast(field_value, indent + 2)  # Pass list to print_ast
+            elif hasattr(field_value, "__dataclass_fields__"):  # Single AST node
+                print(f"{indent_str}  {field_name}:")
+                print_ast(field_value, indent + 2)
+            else:  # Primitive value or list of primitives from quote
+                print(f"{indent_str}  {field_name}: {field_value!r}")
+    else:
+        print(f"{indent_str}{node!r}")  # Primitive from quote or unhandled type
 
 
 def run_parser_tests():
@@ -96,4 +134,12 @@ def run_parser_tests():
 
 
 if __name__ == "__main__":
+    import sys
+    import os
+    # Add src directory to sys.path to allow imports of lexer, parser etc.
+    # when running this test script directly.
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
     run_parser_tests()

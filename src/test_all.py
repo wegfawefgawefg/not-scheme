@@ -3,18 +3,17 @@
 
 import sys
 import os
+import traceback # Moved import here as it's used in one place
 
-# Ensure src directory is in Python path if running from project root
-# This allows imports like `from test_lexer import run_lexer_tests`
-# when test_all.py is in src/ and other test_*.py files are also in src/.
-# If test_all.py is run from src/, this is not strictly necessary for sibling modules.
-# However, if any test files try to import from `src.module`, this helps.
-# For now, assuming direct imports like `from test_lexer ...` work if all are in `src`.
+# Add the 'src' directory to sys.path
+# This allows modules in 'tests' to import from 'src' as if 'src' is a top-level package
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
-# It's often better to run tests using a test runner from the project root,
-# e.g., `python -m unittest discover src` or `pytest src`.
-# But for this custom runner:
-
+# Now, sibling test files (e.g., test_lexer.py) can do `from lexer import ...`
+# And test_all.py itself can import test modules from the current 'tests' directory
 try:
     from test_lexer import run_lexer_tests
     from test_parser import run_parser_tests
@@ -24,7 +23,10 @@ try:
     from speed_tests import run_all_speed_tests
 except ImportError as e:
     print(f"Error importing test modules: {e}")
-    print("Please ensure all test_*.py files and component modules (lexer, parser, etc.) are in the src/ directory or your PYTHONPATH is set up correctly.")
+    print(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    print(f"SRC_DIR: {SRC_DIR}")
+    print(f"sys.path: {sys.path}")
+    print("Please ensure all test_*.py files are in the tests/ directory and component modules (lexer, parser, etc.) are in the src/ directory.")
     sys.exit(1)
 
 def main():
@@ -66,7 +68,6 @@ def main():
 
     except Exception as e:
         print(f"\n\n!!!!!! An error occurred during test execution: {e} !!!!!!")
-        import traceback
         traceback.print_exc()
     finally:
         # Restore CWD if it was changed by any test.

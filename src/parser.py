@@ -3,9 +3,8 @@
 # Converts a stream of tokens from the lexer into an Abstract Syntax Tree (AST).
 
 from lexer import (
-    LexerError,  # User's import change
     TokenType,
-    Token,
+    # Token, # Unused import
 )
 from ast_nodes import (
     NumberNode,
@@ -31,7 +30,7 @@ from ast_nodes import (
     Expression,
     TopLevelForm,
 )
-from typing import Any, List, Union, Optional  # User's import change
+from typing import Any, List, Union, Optional
 
 
 class ParserError(Exception):
@@ -455,43 +454,3 @@ class Parser:
             expressions.append(self._parse_expression())
         self._consume_token(TokenType.RPAREN)
         return BeginNode(expressions=expressions)
-
-
-def print_ast(node, indent=0):
-    indent_str = "  " * indent
-    if isinstance(node, ProgramNode):
-        print(f"{indent_str}ProgramNode:")
-        for form in node.forms:
-            print_ast(form, indent + 1)
-    elif isinstance(node, list):
-        # Check if it's a list of AST nodes or a list of primitive quoted data
-        if node and hasattr(
-            node[0], "__dataclass_fields__"
-        ):  # Simple check if elements are dataclasses
-            print(f"{indent_str}[")
-            for item in node:
-                print_ast(item, indent + 1)
-            print(f"{indent_str}]")
-        else:  # Likely a list of primitive data from a quote
-            print(f"{indent_str}{node!r}")
-
-    elif hasattr(
-        node, "__dataclass_fields__"
-    ):  # Check if it's a dataclass (our AST nodes are)
-        print(f"{indent_str}{node.__class__.__name__}:")
-        for field_name in node.__dataclass_fields__:
-            field_value = getattr(node, field_name)
-            if (  # Check if list of AST nodes
-                isinstance(field_value, list)
-                and field_value
-                and hasattr(field_value[0], "__dataclass_fields__")
-            ):
-                print(f"{indent_str}  {field_name}:")
-                print_ast(field_value, indent + 2)  # Pass list to print_ast
-            elif hasattr(field_value, "__dataclass_fields__"):  # Single AST node
-                print(f"{indent_str}  {field_name}:")
-                print_ast(field_value, indent + 2)
-            else:  # Primitive value or list of primitives from quote
-                print(f"{indent_str}  {field_name}: {field_value!r}")
-    else:
-        print(f"{indent_str}{node!r}")  # Primitive from quote or unhandled type

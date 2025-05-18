@@ -2,21 +2,21 @@
 # Lexer for the NotScheme language
 
 import re
-from enum import Enum, auto
+from enum import Enum # Removed auto
 from collections import namedtuple
 
 
 class TokenType(Enum):
-    LPAREN = auto()  # (
-    RPAREN = auto()  # )
-    QUOTE = auto()  # ' (for quoted lists)
-    SYMBOL = auto()  # identifiers, keywords, operators like +, *
-    NUMBER = auto()  # 123, 3.14, -5
-    STRING = auto()  # "hello world"
-    BOOLEAN = auto()  # true, false
-    NIL = auto()  # nil
-    COMMENT = auto()  # // ...
-    EOF = auto()  # End of File
+    LPAREN = 1
+    RPAREN = 2
+    QUOTE = 3
+    SYMBOL = 4
+    NUMBER = 5
+    STRING = 6
+    BOOLEAN = 7
+    NIL = 8
+    COMMENT = 9
+    EOF = 10
 
 
 # Token named tuple to store type, value, and optionally line/column numbers
