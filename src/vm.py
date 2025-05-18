@@ -1,7 +1,5 @@
 from enum import Enum
 import collections
-# import sys # Unused
-# import copy # Unused
 
 # --- Closure Representation ---
 Closure = collections.namedtuple("Closure", ["code_label", "defining_env"])
@@ -16,8 +14,9 @@ QuotedSymbol = collections.namedtuple("QuotedSymbol", ["name"])
 # NotScheme lists are Python lists. Nil is Python None.
 
 
-# --- Instruction Set Definition ---
 class OpCode(Enum):
+    """instruction set definition"""
+
     # Stack Manipulation
     PUSH = 1
     POP = 2
@@ -71,7 +70,6 @@ class OpCode(Enum):
     # LENGTH, APPEND_LIST, STRING_APPEND, NTH_ELEMENT are removed
 
 
-# --- Virtual Machine Class ---
 class VirtualMachine:
     def __init__(self, code):
         self.code = code

@@ -2,7 +2,9 @@
 # Code Generator for the NotScheme language.
 # Converts an AST into bytecode for the NotScheme VM.
 
-from ast_nodes import (
+from typing import List, Dict, Any, Tuple, Union, Set, Optional
+
+from src.ast_nodes import (
     ProgramNode,
     StaticNode,
     FnNode,
@@ -16,7 +18,6 @@ from ast_nodes import (
     QuoteNode,
     CallNode,
     IfNode,
-    LetBinding,
     LetNode,
     LambdaNode,
     GetNode,
@@ -26,25 +27,24 @@ from ast_nodes import (
     Expression,
     TopLevelForm,
 )
-from vm import OpCode, QuotedSymbol
-from typing import List, Dict, Any, Tuple, Union, Set, Optional # Removed get_args
+from src.vm import OpCode, QuotedSymbol
 
 # EXPRESSION_NODE_TYPES was unused, replaced with inline tuple below
 # EXPRESSION_NODE_TYPES = (
 #     NumberNode,
 #     StringNode,
 #     BooleanNode,
-NilNode,
-SymbolNode,
-QuoteNode,
-CallNode,
-IfNode,
-LetNode,
-LambdaNode,
-GetNode,
-SetNode,
-WhileNode,
-BeginNode,
+# (NilNode,)
+# (SymbolNode,)
+# (QuoteNode,)
+# (CallNode,)
+# (IfNode,)
+# (LetNode,)
+# (LambdaNode,)
+# (GetNode,)
+# (SetNode,)
+# (WhileNode,)
+# (BeginNode,)
 # )
 
 
@@ -153,7 +153,25 @@ class CodeGenerator:
             self._generate_fn_node(form)
         elif isinstance(form, StructDefNode):
             self._generate_struct_def_node(form)
-        elif isinstance(form, (NumberNode, StringNode, BooleanNode, NilNode, SymbolNode, QuoteNode, CallNode, IfNode, LetNode, LambdaNode, GetNode, SetNode, WhileNode, BeginNode)):
+        elif isinstance(
+            form,
+            (
+                NumberNode,
+                StringNode,
+                BooleanNode,
+                NilNode,
+                SymbolNode,
+                QuoteNode,
+                CallNode,
+                IfNode,
+                LetNode,
+                LambdaNode,
+                GetNode,
+                SetNode,
+                WhileNode,
+                BeginNode,
+            ),
+        ):
             self._generate_expression(form)
             if not is_last_form_in_program and len(self.bytecode) > start_len:
                 last_instr = self.bytecode[-1]
@@ -447,8 +465,8 @@ class CodeGenerator:
                 f"Error reading module file {module_file_path}: {e}"
             )
 
-        from lexer import tokenize as dep_tokenize, LexerError as DepLexerError
-        from parser import Parser as DepParser, ParserError as DepParserError
+        from src.lexer import tokenize as dep_tokenize, LexerError as DepLexerError
+        from src.parser import Parser as DepParser, ParserError as DepParserError
 
         try:
             dep_tokens = dep_tokenize(source_code)
@@ -497,5 +515,3 @@ class CodeGenerator:
                 print(
                     f"Warning: Item '{item_name}' in '(use {module_name_to_load} ...)' not found in module '{module_name_to_load}'."
                 )
-
-

@@ -1,16 +1,9 @@
-# Contains end-to-end language feature tests for NotScheme.
+# Contains end-to-end language feature tests
 
 import os
-
-# import sys # sys will be imported in __main__ if needed
-# import io # io is not used
-import traceback  # Moved import here
+import traceback
 from typing import Any, Optional, List, Dict
 
-# Assuming vm.py and run_notscheme.py are in the parent directory (src)
-# or accessible via PYTHONPATH.
-# For direct execution from src/, this relative import works.
-# If run from root, Python path might need adjustment or use absolute imports.
 from src.vm import QuotedSymbol
 from src.run_notscheme import (
     compile_program_with_dependencies,

@@ -1,12 +1,10 @@
-# parser.py
-# Parser for the NotScheme language.
-# Converts a stream of tokens from the lexer into an Abstract Syntax Tree (AST).
+from typing import Any, List, Union, Optional
 
-from lexer import (
+from src.lexer import (
     TokenType,
-    Token, # Unused import -> Now used for type hinting
+    Token,
 )
-from ast_nodes import (
+from src.ast_nodes import (
     NumberNode,
     StringNode,
     BooleanNode,
@@ -30,7 +28,6 @@ from ast_nodes import (
     Expression,
     TopLevelForm,
 )
-from typing import Any, List, Union, Optional
 
 
 class ParserError(Exception):

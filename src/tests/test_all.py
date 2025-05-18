@@ -1,23 +1,16 @@
 # Main test runner for the entire NotScheme project.
 # This script imports and runs test suites from other test files.
 
-import sys
 import os
-import traceback # Moved import here as it's used in one place
+import traceback
 
-# Imports are now absolute, assuming the tests are run as modules from the project root.
-try:
-    from src.tests.test_lexer import run_lexer_tests
-    from src.tests.test_parser import run_parser_tests
-    from src.tests.test_codegen import run_codegen_tests
-    from src.tests.test_language import run_language_feature_tests
-    from src.tests.test_vm import run_all_vm_tests
-    from src.tests.test_speed import run_all_speed_tests
-except ImportError as e:
-    print(f"Error importing test modules: {e}")
-    print(f"sys.path: {sys.path}")
-    print("Please ensure you are running tests from the project root (e.g., using 'python -m src.tests.test_all') and that all test_*.py files are in the src/tests/ directory and component modules (lexer, parser, etc.) are in the src/ directory.")
-    sys.exit(1)
+from src.tests.test_lexer import run_lexer_tests
+from src.tests.test_parser import run_parser_tests
+from src.tests.test_codegen import run_codegen_tests
+from src.tests.test_language import run_language_feature_tests
+from src.tests.test_vm import run_all_vm_tests
+from src.tests.test_speed import run_all_speed_tests
+
 
 def main():
     """Runs all NotScheme test suites."""
@@ -63,9 +56,11 @@ def main():
         # Restore CWD if it was changed by any test.
         # This is a basic safety measure; ideally tests should clean up their CWD changes.
         if os.getcwd() != original_cwd:
-            print(f"\nWarning: Current working directory changed. Restoring to: {original_cwd}")
+            print(
+                f"\nWarning: Current working directory changed. Restoring to: {original_cwd}"
+            )
             os.chdir(original_cwd)
-        
+
         # General cleanup of .ns files that might be left in CWD if tests failed before cleanup.
         # This is a bit broad. Better if each test suite cleans its own specific files.
         # For now, this is a fallback.
@@ -78,10 +73,10 @@ def main():
         #         # For now, relying on individual test cleanup.
         #         pass
 
-
     print("\n\n=============================================")
     print("====== All Test Suites Completed ======")
     print("=============================================")
+
 
 if __name__ == "__main__":
     # If running `python src/test_all.py` from project root, imports should work.
