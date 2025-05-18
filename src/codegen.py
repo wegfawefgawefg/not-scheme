@@ -1,6 +1,7 @@
-# codegen.py
-# Code Generator for the NotScheme language.
-# Converts an AST into bytecode for the NotScheme VM.
+"""
+code generation
+    converts the AST into bytecode targetting the vm
+"""
 
 from typing import List, Dict, Any, Tuple, Union, Set, Optional
 

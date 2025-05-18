@@ -7,7 +7,7 @@ import sys
 
 # Assuming run_notscheme.py is in the src directory or accessible in PYTHONPATH
 try:
-    from src.run_notscheme import (
+    from ns import (
         compile_program_with_dependencies,
         execute_bytecode,
         NotSchemeError,
@@ -166,7 +166,7 @@ def run_performance_test(
 def run_all_speed_tests():
     """Runs all speed/performance comparison tests."""
     print("--- Running Performance Comparison Tests ---")
-    
+
     fib_n_value = 20
     run_performance_test(
         "Recursive Fibonacci",
@@ -176,7 +176,7 @@ def run_all_speed_tests():
         notscheme_main_file_name=f"fib_test_{fib_n_value}.ns",
     )
 
-    sum_n_value = 900 # Reduced from a potentially higher value
+    sum_n_value = 900  # Reduced from a potentially higher value
     run_performance_test(
         "Recursive Summation",
         notscheme_sum_recursive_code_template.format(N=sum_n_value),
@@ -185,6 +185,7 @@ def run_all_speed_tests():
         notscheme_main_file_name=f"sum_recursive_test_{sum_n_value}.ns",
     )
     # The final "Performance comparison finished." print is now inside this function.
+
 
 if __name__ == "__main__":
     # To run this file directly, ensure the project root is in PYTHONPATH

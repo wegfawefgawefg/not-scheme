@@ -1,8 +1,7 @@
-# ast_nodes.py
-# Defines the Abstract Syntax Tree (AST) node types for NotScheme.
+# Defines the Abstract Syntax Tree (AST) node types
 
-from dataclasses import dataclass, field
-from typing import List, Union, Any, Optional  # Any for value in literals for now
+from dataclasses import dataclass
+from typing import List, Union, Any
 
 # --- Base Node (Optional, for common functionality if needed later) ---
 # class ASTNode:

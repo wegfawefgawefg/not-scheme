@@ -1,8 +1,5 @@
-# lexer.py
-# Lexer for the NotScheme language
-
 import re
-from enum import Enum # Removed auto
+from enum import Enum  # Removed auto
 from collections import namedtuple
 
 
@@ -153,5 +150,3 @@ def tokenize(source_code: str) -> list[Token]:
 
     tokens.append(Token(TokenType.EOF, None, line_num, 1))  # Add End Of File token
     return tokens
-
-

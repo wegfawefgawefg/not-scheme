@@ -5,7 +5,7 @@ import traceback
 from typing import Any, Optional, List, Dict
 
 from src.vm import QuotedSymbol
-from src.run_notscheme import (
+from ns import (
     compile_program_with_dependencies,
     execute_bytecode,
     NotSchemeError,

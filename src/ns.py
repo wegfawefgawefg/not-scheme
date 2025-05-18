@@ -1,4 +1,3 @@
-# run_notscheme.py
 # End-to-end pipeline for lexing, parsing, compiling, and running NotScheme code.
 # Can be used as a CLI to run .ns files or to run internal tests.
 
