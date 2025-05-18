@@ -185,4 +185,27 @@ if __name__ == "__main__":
         notscheme_main_file_name=f"sum_recursive_test_{sum_n_value}.ns",
     )
 
-    print("\nPerformance comparison finished.")
+    print("\n--- Performance comparison finished. ---")
+
+def run_all_speed_tests():
+    """Runs all speed/performance comparison tests."""
+    print("--- Running Performance Comparison Tests ---")
+    
+    fib_n_value = 20
+    run_performance_test(
+        "Recursive Fibonacci",
+        notscheme_fib_code_template.format(N=fib_n_value),
+        py_fib,
+        fib_n_value,
+        notscheme_main_file_name=f"fib_test_{fib_n_value}.ns",
+    )
+
+    sum_n_value = 900 # Reduced from a potentially higher value
+    run_performance_test(
+        "Recursive Summation",
+        notscheme_sum_recursive_code_template.format(N=sum_n_value),
+        py_sum_up_to_recursive,
+        sum_n_value,
+        notscheme_main_file_name=f"sum_recursive_test_{sum_n_value}.ns",
+    )
+    # The final "Performance comparison finished." print is now inside this function.

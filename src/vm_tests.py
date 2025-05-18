@@ -320,4 +320,16 @@ if __name__ == "__main__":
     test_true_closure_make_adder()
     test_struct_operations()
 
-    print("\nAll tests completed.")
+    print("\n--- All VM tests completed. ---")
+
+def run_all_vm_tests():
+    """Runs all VM tests."""
+    print("--- Running VM Tests ---")
+    test_arithmetic()
+    test_conditional()
+    test_function_call_closure()
+    test_recursion_closure()
+    test_scope_closure()
+    test_true_closure_make_adder()
+    test_struct_operations()
+    # The final "All tests completed" print is now inside this function.
