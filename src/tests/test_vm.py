@@ -2,6 +2,8 @@
 # It assumes the VirtualMachine, OpCode, and Closure classes are defined
 # in a file named `vm.py` in the same directory.
 
+import os # Added for sys.path manipulation
+import sys # Added for sys.path manipulation
 from vm import VirtualMachine, OpCode, Closure  # Assuming vm.py contains the VM
 
 
@@ -324,4 +326,10 @@ def run_all_vm_tests():
     # The final "All tests completed" print is now inside this function.
 
 if __name__ == "__main__":
+    # Add src directory to sys.path to allow imports from src
+    # when running this test script directly.
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
     run_all_vm_tests()

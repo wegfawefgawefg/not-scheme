@@ -187,4 +187,10 @@ def run_all_speed_tests():
     # The final "Performance comparison finished." print is now inside this function.
 
 if __name__ == "__main__":
+    # Add src directory to sys.path to allow imports from src
+    # when running this test script directly.
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
+    if SRC_DIR not in sys.path:
+        sys.path.insert(0, SRC_DIR)
     run_all_speed_tests()

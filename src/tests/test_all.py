@@ -7,7 +7,8 @@ import traceback # Moved import here as it's used in one place
 
 # Add the 'src' directory to sys.path
 # This allows modules in 'tests' to import from 'src' as if 'src' is a top-level package
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# Project root is two levels up from src/tests/
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 SRC_DIR = os.path.join(PROJECT_ROOT, 'src')
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
@@ -19,8 +20,8 @@ try:
     from test_parser import run_parser_tests
     from test_codegen import run_codegen_tests
     from test_language import run_language_feature_tests
-    from vm_tests import run_all_vm_tests
-    from speed_tests import run_all_speed_tests
+    from test_vm import run_all_vm_tests
+    from test_speed import run_all_speed_tests
 except ImportError as e:
     print(f"Error importing test modules: {e}")
     print(f"PROJECT_ROOT: {PROJECT_ROOT}")
