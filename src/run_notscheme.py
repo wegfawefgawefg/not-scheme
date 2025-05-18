@@ -196,4 +196,4 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         print("No file provided to run. To run a NotScheme file, use: python src/run_notscheme.py <file.ns>")
-        print("To run internal tests, use: python src/notscheme_tester.py")
+        print("To run internal tests, use: python src/test.py")

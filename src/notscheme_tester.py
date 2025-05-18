@@ -1,4 +1,4 @@
-# Test suite runner for the NotScheme language.
+# Main test runner for the NotScheme language and its components.
 
 import io
 import os
@@ -10,6 +10,26 @@ from run_notscheme import (
     compile_program_with_dependencies,
     execute_bytecode,
     NotSchemeError,
+)
+
+# Imports for VM tests
+from vm_tests import (
+    test_arithmetic as vm_test_arithmetic,
+    test_conditional as vm_test_conditional,
+    test_function_call_closure as vm_test_function_call_closure,
+    test_recursion_closure as vm_test_recursion_closure,
+    test_scope_closure as vm_test_scope_closure,
+    test_true_closure_make_adder as vm_test_true_closure_make_adder,
+    test_struct_operations as vm_test_struct_operations,
+)
+
+# Imports for Speed tests
+from speed_tests import (
+    run_performance_test,
+    notscheme_fib_code_template,
+    py_fib,
+    notscheme_sum_recursive_code_template,
+    py_sum_up_to_recursive,
 )
 
 
@@ -167,7 +187,7 @@ def run_notscheme_test(
     print("-" * 20)
 
 
-def run_tests():
+def run_language_feature_tests(): # Renamed from run_tests
     # --- Single File Tests ---
     run_notscheme_test(
         "Static Vars", "(static a 10)(static b (+ a 5)) b", expected_value=15
@@ -296,5 +316,50 @@ def run_tests():
     print("\n--- All NotScheme end-to-end tests completed ---")
 
 
+# --- New Main Test Orchestration ---
+def run_all_tests_orchestrator():
+    print("=============================================")
+    print("=== Running All NotScheme Test Suites ===")
+    print("=============================================\n")
+
+    print("\n--- Running NotScheme Language End-to-End Feature Tests ---")
+    run_language_feature_tests()
+
+    print("\n\n--- Running VM Tests ---")
+    vm_test_arithmetic()
+    vm_test_conditional()
+    vm_test_function_call_closure()
+    vm_test_recursion_closure()
+    vm_test_scope_closure()
+    vm_test_true_closure_make_adder()
+    vm_test_struct_operations()
+    print("\n--- All VM tests completed. ---")
+
+    print("\n\n--- Running Performance Comparison Tests ---")
+    # Replicate the calls from speed_tests.py's main block
+    fib_n_value = 20
+    run_performance_test(
+        "Recursive Fibonacci",
+        notscheme_fib_code_template.format(N=fib_n_value),
+        py_fib,
+        fib_n_value,
+        notscheme_main_file_name=f"fib_test_{fib_n_value}.ns",
+    )
+
+    sum_n_value = 900
+    run_performance_test(
+        "Recursive Summation",
+        notscheme_sum_recursive_code_template.format(N=sum_n_value),
+        py_sum_up_to_recursive,
+        sum_n_value,
+        notscheme_main_file_name=f"sum_recursive_test_{sum_n_value}.ns",
+    )
+    print("\n--- Performance comparison finished. ---")
+
+    print("\n\n=============================================")
+    print("=== All Test Suites Completed ===")
+    print("=============================================")
+
+
 if __name__ == "__main__":
-    run_tests()
+    run_all_tests_orchestrator()
