@@ -1,5 +1,0 @@
-// app.ns
-(use my_lib (greet_lib))
-(print "App started")
-(greet_lib "User")
-(print "App finished")

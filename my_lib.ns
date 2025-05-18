@@ -1,2 +1,0 @@
-// my_lib.ns
-(fn greet_lib (name) (print "Hello from lib, " name))
