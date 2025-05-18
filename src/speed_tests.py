@@ -163,9 +163,6 @@ def run_performance_test(
     print("-" * 30)
 
 
-if __name__ == "__main__":
-    run_all_speed_tests()
-
 def run_all_speed_tests():
     """Runs all speed/performance comparison tests."""
     print("--- Running Performance Comparison Tests ---")
@@ -188,3 +185,6 @@ def run_all_speed_tests():
         notscheme_main_file_name=f"sum_recursive_test_{sum_n_value}.ns",
     )
     # The final "Performance comparison finished." print is now inside this function.
+
+if __name__ == "__main__":
+    run_all_speed_tests()

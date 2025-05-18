@@ -311,9 +311,6 @@ def test_struct_operations():
     )
 
 
-if __name__ == "__main__":
-    run_all_vm_tests()
-
 def run_all_vm_tests():
     """Runs all VM tests."""
     print("--- Running VM Tests ---")
@@ -325,3 +322,6 @@ def run_all_vm_tests():
     test_true_closure_make_adder()
     test_struct_operations()
     # The final "All tests completed" print is now inside this function.
+
+if __name__ == "__main__":
+    run_all_vm_tests()
