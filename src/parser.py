@@ -4,7 +4,7 @@
 
 from lexer import (
     TokenType,
-    # Token, # Unused import
+    Token, # Unused import -> Now used for type hinting
 )
 from ast_nodes import (
     NumberNode,
