@@ -5,18 +5,18 @@
 
 Our language will use S-expressions. All user-defined identifiers (variables, functions, struct names, field names, module names) should use underscore_case (e.g., `my_variable`, `calculate_sum`).
 
-1.  **Basic Structure:** (Unchanged)
-2.  **Atoms:**
+1. **Basic Structure:** (Unchanged)
+2. **Atoms:**
     * **Numbers:** Integers and Floats.
     * **Strings:** Enclosed in double quotes.
     * **Symbols:** Used for variable names, function names, keywords, etc. Follow underscore_case.
     * **Booleans:** `true` and `false`.
     * **None Value/Empty List:** `none` (replaces `nil`; represents an empty list and a general null/void value).
 
-3.  **Comments:**
+3. **Comments:**
     * Single-line comments start with `//`.
 
-4.  **Data Structures (Literals & Constructors):**
+4. **Data Structures (Literals & Constructors):**
     * **Lists:**
         * **Quoted Lists (Literal Data):** `'(<item1> <item2> ...)` creates a literal list.
             * Example: `'(1 "hello" true none)` (Updated)
@@ -24,7 +24,7 @@ Our language will use S-expressions. All user-defined identifiers (variables, fu
             * Example: `(list (+ 1 2) "world")` results in `(3 "world")`
     * **Structs:** (Defined by `struct` special form)
 
-5.  **Special Forms (Keywords with specific evaluation rules):**
+5. **Special Forms (Keywords with specific evaluation rules):**
 
     * **`static`**: Defines module-scoped variables: `(static <symbol> <expression>)`
     * **`fn`**: Defines named functions: `(fn <symbol> (<params...>) <body...>)`
@@ -42,15 +42,15 @@ Our language will use S-expressions. All user-defined identifiers (variables, fu
     * **`while`**: Looping: `(while <condition> <body...>)` (evaluates to `none`)
     * **`use`**: Imports from modules: `(use <module_name> (<items...>))` or `(use <module_name> *)`
 
-6.  **Function Calls & Struct Instantiation:**
+6. **Function Calls & Struct Instantiation:**
     * General: `(<function_expr> <args...>)`
     * Struct: `(<StructName> <field_values...>)`
 
 ## II. Modules and Imports
 
-1.  **File-based Modules:** Each `.ns` file is a module. Filename (underscore_case, no extension) is its name.
-2.  **Public by Default:** All top-level definitions (`static`, `fn`, `struct` type and its constructor) are public.
-3.  **Imports with `use`:** Imports specified items or all (`*`) items from another module.
+1. **File-based Modules:** Each `.ns` file is a module. Filename (underscore_case, no extension) is its name.
+2. **Public by Default:** All top-level definitions (`static`, `fn`, `struct` type and its constructor) are public.
+3. **Imports with `use`:** Imports specified items or all (`*`) items from another module.
 
 ## III. Core Primitives & Standard Library Philosophy
 
@@ -74,6 +74,7 @@ NotScheme aims for a minimal core language and Virtual Machine. A small set of e
 (Examples should be updated to use `none` instead of `nil`, and `is_none` instead of `is_nil`)
 
 **1. Basic Definitions, Arithmetic, and Control Flow:**
+
 ```ns
 // main_basics.ns
 (static pi 3.14)
@@ -142,4 +143,6 @@ NotScheme aims for a minimal core language and Virtual Machine. A small set of e
 
 (let new_list (cons 0 (cons 1 (cons 2 none)))) // Changed from nil
 (print "Constructed list:" new_list) 
+```
+
 6. Modules (use statement): (Examples remain structurally similar, just use none if applicable)V. Tooling and Ecosystem GoalsCompiler & Build Tool (nsc & nscargo):A standalone command-line compiler, envisioned as nsc (NotScheme Compiler).A build system and package manager, conceptually nscargo.Implementation Language of Core Tools:Long-term intention to potentially rewrite core components in a systems language (Rust, C++, or C).FFI (Foreign Function Interface): This choice would influence FFI strategies.Syntax Highlighting: For popular code editors.Linting and Formatting Tools.Language Server Protocol (LSP) Support.Debugging Tools.Line-Aware and Contextual Error Reporting.VI. Future Language Design ConsiderationsOption and Result Types:Explicit types for handling optionality (Option<T>: Some(value) or NoneType (if none is the value for Option::None)) and results (Result<T, E>).Pattern Matching.Static Typing (Optional).Advanced Macro System.This version (v20) updates boolean literals, changes nil to none (and is_nil to is_none), names the compiler nsc and package manager nscargo, and discusses the intention for a systems language rewrite of core tools, FFI, and future consideration of Option/Result types. Examples have been updated for none.
